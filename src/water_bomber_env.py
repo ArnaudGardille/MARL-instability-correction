@@ -21,7 +21,7 @@ class WaterBomberEnv(ParallelEnv):
 
     self.X_MAX = 4
     self.Y_MAX = 4
-    self.T_MAX = 100
+    self.T_MAX = 20
     self.N_AGENTS = 2
 
     self.fires = []
@@ -38,11 +38,14 @@ class WaterBomberEnv(ParallelEnv):
     self.fires = [[2,3],[4,3]]
     self.water_bombers = [[0,2],[2,2]]
 
+    self.has_finished = [False]*self.N_AGENTS
+
     self.timestep = 0
 
     observations = self._generate_observations()
+    infos = {a: {} for a in self.agents}
 
-    return observations, {}
+    return observations, infos
 
   def step(self, actions):
     for i, action in actions.items():
@@ -63,20 +66,23 @@ class WaterBomberEnv(ParallelEnv):
         self.water_bombers[i][0] -= 1
     
 
-    terminations = {a: self.water_bombers[a] in self.fires for a in self.agents}
+    #terminations = {a: self.water_bombers[a] in self.fires for a in self.agents}
+    terminations = {agent: False for agent in self.agents}
+
+    self.has_finished = [self.water_bombers[a] in self.fires for a in self.agents]
 
     rewards = {a: self._compute_reward() for a in self.agents}
 
+    self.timestep += 1
+
+    infos = {a: {} for a in self.agents}
+
     truncations = {a: False for a in self.agents}
-    if self.timestep > self.T_MAX:
+    if self.timestep > self.T_MAX or np.all(self.has_finished):
       truncations = {a: True for a in self.agents}
       self.agents = []
 
-    self.timestep += 1
-
-
-    infos = {a: {} for a in self.agents}
-    self.agents = [a for a in self.agents if not (terminations[a] or truncations[a])]
+    #self.agents = [a for a in self.agents if not (terminations[a] or truncations[a])]
     
     observations = self._generate_observations()
 
@@ -99,18 +105,19 @@ class WaterBomberEnv(ParallelEnv):
       grid[y, x] = str(i)
 
     result = "\n".join(["".join([i for i in row]) for row in grid[::-1]])
+    print()
     print(result)
 
   @functools.lru_cache(maxsize=None)
   def observation_space(self, agent):
       return Dict({
         'observation': MultiDiscrete(sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(4)]+[[self.N_AGENTS, self.T_MAX]], [])), #+[13]
-        'action_mask': MultiBinary(4)
+        'action_mask': MultiBinary(5)
       })
 
   @functools.lru_cache(maxsize=None)
   def action_space(self, agent):
-      return Discrete(4)
+      return Discrete(5)
 
 
   def _is_terminated(self):
@@ -133,7 +140,12 @@ class WaterBomberEnv(ParallelEnv):
     action_masks = {}
     for agent in self.agents:
       x, y = self.water_bombers[agent]
-      action_mask = np.ones(4)
+      action_mask = np.ones(5)
+
+      if self.has_finished[agent]:
+        action_mask = np.array([0,0,0,0,1])
+      else:
+        action_mask[-1] = 0
 
       if y==self.Y_MAX or [x,y+1] in self.water_bombers:
         action_mask[0] = 0
@@ -163,6 +175,7 @@ if __name__ == "__main__":
   observations, _ = env.reset(seed=42)
   env.render()
   #print("observations initiale:", observations)
+  total_reward = 0.0
   while env.agents:
     # this is where you would insert your policy
     actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'])[0]) for agent in env.agents}  
@@ -170,8 +183,9 @@ if __name__ == "__main__":
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
     #print("actions:",actions)
     observations, rewards, terminations, truncations, infos = env.step(actions)
-    print("rewards:",rewards)
+    total_reward += np.mean(list(rewards.values())) 
+    print("rewards:",rewards, "; total reward:", total_reward)
 
     env.render()
-    time.sleep(0.2)
+    time.sleep(0.1)
   env.close()

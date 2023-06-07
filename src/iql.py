@@ -91,12 +91,12 @@ def parse_args():
     parser.add_argument("--tau", type=float, default=1.,
         help="the target network update rate")
     parser.add_argument("--evaluation-frequency", type=int, default=1000)
-    parser.add_argument("--evaluation-episodes", type=int, default=1)
+    parser.add_argument("--evaluation-episodes", type=int, default=100)
     parser.add_argument("--target-network-frequency", type=int, default=500,
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int, default= 10000, #2**18, #256, #
+    parser.add_argument("--batch-size", type=int, default= 1000, #2**18, #256, #
         help="the batch size of sample from the reply memory")
-    parser.add_argument("--start-e", type=float, default=1,
+    parser.add_argument("--start-e", type=float, default=0.5,
         help="the starting epsilon for exploration")
     parser.add_argument("--end-e", type=float, default=0.05,
         help="the ending epsilon for exploration")
@@ -252,7 +252,7 @@ class QAgent():
         # ALGO LOGIC: training.
         if global_step > self.learning_starts:
             #print("mod: ", (global_step + 100*self.id) % self.train_frequency)
-            if (global_step + 100*self.id) % self.train_frequency == 0:
+            if global_step % self.train_frequency == 0:
                 data = self.replay_buffer.sample(self.batch_size)
                 #print("data: ", data)
                 action_mask = data.next_observations['action_mask']
@@ -333,7 +333,7 @@ class QAgent():
         assert isinstance(self.replay_buffer, ReplayBuffer), "The replay buffer must inherit from ReplayBuffer class"
 
 
-def run_episode(env, q_agents, completed_episodes, training=False):
+def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False):
     obs, _ = env.reset()
 
     if args.add_id:
@@ -345,7 +345,7 @@ def run_episode(env, q_agents, completed_episodes, training=False):
     nb_steps = 0
 
     while env.agents:
-        if args.display_video or not training:
+        if visualisation:
             env.render()
             time.sleep(0.1)
         
@@ -356,8 +356,7 @@ def run_episode(env, q_agents, completed_episodes, training=False):
         
         actions = {agent: q_agents[agent].act(obs[agent], completed_episodes, training) for agent in env.agents}  
         #actions = {agent: np.random.choice(np.nonzero(obs[agent]['action_mask'])[0]) for agent in env.agents}  
-        if args.display_video:
-            print('Actions:', actions)
+
         next_obs, rewards, terminations, truncations, infos = env.step(actions)
 
         if args.add_id:
@@ -370,18 +369,16 @@ def run_episode(env, q_agents, completed_episodes, training=False):
         for agent in obs:
             if agent not in next_obs:
                 next_obs[agent] = obs[agent]
-                print(actions[agent])
-                print(rewards[agent])
-                print(next_obs[agent])
-                print(terminations[agent])
-                print(truncations[agent])
-                print(infos[agent])
+
+            #if rewards[agent]>0:
+            #    print(rewards[agent])
+
             q_agents[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
 
         #episodic_returns = {k: rewards.get(k, 0) + episodic_returns.get(k, 0) for k in set(rewards) | set(episodic_returns)}
         episodic_return += np.mean(list(rewards.values())) 
 
-        if args.display_video or not training:
+        if visualisation and False:
             print('Masks:', {a:obs[a]['action_mask'] for a in obs})
             print('Actions:', actions)
             print("Return:",episodic_return)
@@ -391,6 +388,8 @@ def run_episode(env, q_agents, completed_episodes, training=False):
         nb_steps += 1
 
         obs = next_obs
+
+    
 
     if training:
         if args.single_agent:
@@ -470,7 +469,9 @@ def main():
         if not args.no_training:
             run_episode(env, q_agents, completed_episodes, training=True)
 
-        if args.no_training or completed_episodes % args.evaluation_frequency == 0:
+
+        if completed_episodes % args.evaluation_frequency == 0:
+            nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, visualisation=True)
             
             list_total_reward = []
             average_duration = 0.0
