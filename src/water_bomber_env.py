@@ -3,7 +3,7 @@ import random
 from copy import copy
 
 import numpy as np
-from gymnasium.spaces import Discrete, MultiDiscrete
+from gymnasium.spaces import *
 
 from pettingzoo.utils.env import ParallelEnv
 from pettingzoo.test import parallel_api_test
@@ -21,7 +21,8 @@ class WaterBomberEnv(ParallelEnv):
 
     self.X_MAX = 4
     self.Y_MAX = 4
-    self.T_MAX = 13
+    self.T_MAX = 100
+    self.N_AGENTS = 2
 
     self.fires = []
     self.water_bombers = []
@@ -94,15 +95,18 @@ class WaterBomberEnv(ParallelEnv):
     for x, y in self.fires:
       grid[y, x] = "F"
 
-    for x, y in self.water_bombers:
-      grid[y, x] = "B"
+    for i, (x, y) in enumerate(self.water_bombers):
+      grid[y, x] = str(i)
 
     result = "\n".join(["".join([i for i in row]) for row in grid[::-1]])
     print(result)
 
   @functools.lru_cache(maxsize=None)
   def observation_space(self, agent):
-      return MultiDiscrete([[self.X_MAX+1, self.Y_MAX+1] for _ in range(4)]) #+[13]
+      return Dict({
+        'observation': MultiDiscrete(sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(4)]+[[self.N_AGENTS, self.T_MAX]], [])), #+[13]
+        'action_mask': MultiBinary(4)
+      })
 
   @functools.lru_cache(maxsize=None)
   def action_space(self, agent):
@@ -120,9 +124,10 @@ class WaterBomberEnv(ParallelEnv):
 
   def _compute_reward(self):
     if self._is_terminated():
-      return 1.0-0.01*factorielle(self.timestep)
+      return 15.0
+      #return 1.0-0.01*factorielle(self.timestep)
     else:
-      return 0.0
+      return -1.0
 
   def _generate_observations(self):
     action_masks = {}
@@ -143,7 +148,7 @@ class WaterBomberEnv(ParallelEnv):
 
     observations = {
       a: {
-        "observation":torch.tensor(self.fires + self.water_bombers , dtype=torch.float), #+ [self.timestep]
+        "observation":torch.flatten(torch.tensor(self.fires + self.water_bombers +[[a, self.timestep]], dtype=torch.float)), #+ [self.timestep]
         "action_mask":action_masks[a]
       } 
       for a in self.agents
