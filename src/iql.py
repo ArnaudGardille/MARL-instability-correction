@@ -78,13 +78,13 @@ def parse_args():
         help="the experiment from which to load agents.")
     parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to show the video")
-    parser.add_argument("--total-timesteps", type=int, default=500000,
+    parser.add_argument("--total-timesteps", type=int, default=1000000,
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
+    parser.add_argument("--learning-rate", type=float, default=1e-3,
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--buffer-size", type=int, default=1000000,
+    parser.add_argument("--buffer-size", type=int, default=10000000,
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.99,
         help="the discount factor gamma")
@@ -92,9 +92,9 @@ def parse_args():
         help="the target network update rate")
     parser.add_argument("--evaluation-frequency", type=int, default=1000)
     parser.add_argument("--evaluation-episodes", type=int, default=100)
-    parser.add_argument("--target-network-frequency", type=int, default=500,
+    parser.add_argument("--target-network-frequency", type=int, default=1000,
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int, default= 1000, #2**18, #256, #
+    parser.add_argument("--batch-size", type=int, default= 10000, #2**18, #256, #
         help="the batch size of sample from the reply memory")
     parser.add_argument("--start-e", type=float, default=0.5,
         help="the starting epsilon for exploration")
@@ -102,9 +102,9 @@ def parse_args():
         help="the ending epsilon for exploration")
     parser.add_argument("--exploration-fraction", type=float, default=0.5,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
-    parser.add_argument("--learning-starts", type=int, default=5000,
+    parser.add_argument("--learning-starts", type=int, default=10000,
         help="timestep to start learning")
-    parser.add_argument("--train-frequency", type=int, default=30,
+    parser.add_argument("--train-frequency", type=int, default=10,
         help="the frequency of training")
     parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to use a single network for all agents. Identity is the added to observation")
@@ -298,6 +298,7 @@ class QAgent():
         
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
+
         #if args.add_id:
             #self.one_hot.to(device)
             
@@ -332,9 +333,31 @@ class QAgent():
         self.replay_buffer = load_from_pkl(buffer_path)
         assert isinstance(self.replay_buffer, ReplayBuffer), "The replay buffer must inherit from ReplayBuffer class"
 
+    def visualize_q_values(self, obervation):
+        
+        for i in range(env.X_MAX):
+            for j in range(env.Y_MAX):
+                obervation[2*self.id] = x
+                obervation[2*self.id + 1] = y
 
-def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False):
+                target_max, _ = (self.target_network(obervation)*action_mask).max(dim=1)
+
+
+
+
+        #obervation['observation'].to(device)
+
+
+
+        
+
+ 
+
+
+def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False, verbose=False):
     obs, _ = env.reset()
+    if verbose:
+        print('initial obs:', obs)
 
     if args.add_id:
         for agent in obs:
@@ -356,8 +379,12 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
         
         actions = {agent: q_agents[agent].act(obs[agent], completed_episodes, training) for agent in env.agents}  
         #actions = {agent: np.random.choice(np.nonzero(obs[agent]['action_mask'])[0]) for agent in env.agents}  
-
+        if verbose:
+            print("actions:", actions)
         next_obs, rewards, terminations, truncations, infos = env.step(actions)
+        if verbose:
+            print("next_obs:", next_obs)
+            print("rewards:", rewards)
 
         if args.add_id:
             for agent in next_obs:
@@ -367,13 +394,17 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
         #if training:
         # On entraine pas, mais on complete quand meme le replay buffer
         for agent in obs:
-            if agent not in next_obs:
-                next_obs[agent] = obs[agent]
+            
 
-            #if rewards[agent]>0:
-            #    print(rewards[agent])
+            if visualisation and rewards[agent]>0:
+                print("obs:",obs[agent])
+                print("actions:",actions[agent])
+                print("rewards:",rewards[agent])
+                print("next_obs:",next_obs[agent])
+                print("terminations:",terminations[agent])
 
             q_agents[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
+            writer.add_scalar(q_agents[agent].name+"/replay buffer position", q_agents[agent].replay_buffer.pos, completed_episodes)
 
         #episodic_returns = {k: rewards.get(k, 0) + episodic_returns.get(k, 0) for k in set(rewards) | set(episodic_returns)}
         episodic_return += np.mean(list(rewards.values())) 
