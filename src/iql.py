@@ -4,6 +4,8 @@ import random
 import numpy as np
 from time import sleep
 
+scale = 0.25   
+
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqnpy
 import argparse
 import os
@@ -36,6 +38,8 @@ from sklearn.preprocessing import OneHotEncoder
 
 from pettingzoo.classic import tictactoe_v3
 import pandas as pd 
+
+import matplotlib.pyplot as plt
 
 from gymnasium.spaces import *
 
@@ -78,25 +82,25 @@ def parse_args():
         help="the experiment from which to load agents.")
     parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to show the video")
-    parser.add_argument("--total-timesteps", type=int, default=1000000,
+    parser.add_argument("--total-timesteps", type=int, default=500000,
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=1e-3,
+    parser.add_argument("--learning-rate", type=float, default=1e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--num-envs", type=int, default=1,
         help="the number of parallel game environments")
-    parser.add_argument("--buffer-size", type=int, default=10000000,
+    parser.add_argument("--buffer-size", type=int, default=100000,
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.99,
+    parser.add_argument("--gamma", type=float, default=0.9,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=1.,
         help="the target network update rate")
     parser.add_argument("--evaluation-frequency", type=int, default=1000)
     parser.add_argument("--evaluation-episodes", type=int, default=100)
-    parser.add_argument("--target-network-frequency", type=int, default=1000,
+    parser.add_argument("--target-network-frequency", type=int, default=500,
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int, default= 10000, #2**18, #256, #
+    parser.add_argument("--batch-size", type=int, default= 1024, #2**18, #256, #
         help="the batch size of sample from the reply memory")
-    parser.add_argument("--start-e", type=float, default=0.5,
+    parser.add_argument("--start-e", type=float, default=0.99,
         help="the starting epsilon for exploration")
     parser.add_argument("--end-e", type=float, default=0.05,
         help="the ending epsilon for exploration")
@@ -104,7 +108,7 @@ def parse_args():
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     parser.add_argument("--learning-starts", type=int, default=10000,
         help="timestep to start learning")
-    parser.add_argument("--train-frequency", type=int, default=10,
+    parser.add_argument("--train-frequency", type=int, default=100,
         help="the frequency of training")
     parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to use a single network for all agents. Identity is the added to observation")
@@ -191,11 +195,13 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     
 
 class QAgent():
-    def __init__(self, env, name, id, args, obs_shape, act_shape, one_hot=None):
+    def __init__(self, env, name, agent_id, args, obs_shape, act_shape, one_hot=None):
         for k, v in vars(args).items():
             setattr(self, k, v)
 
-        self.id = int(id)
+        self.env = env
+
+        self.agent_id  = int(agent_id)
         self.name = str(name)
         self.action_space = env.action_space(self.name)
 
@@ -233,14 +239,14 @@ class QAgent():
         epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, global_step)
         writer.add_scalar(self.name+"/epsilon", epsilon, global_step)
 
-        if training and random.random() < epsilon:
+        if training and (random.random() < epsilon):
             actions = np.random.choice(avail_actions_ind)
         else:
             with torch.no_grad():
                 q_values = self.q_network(torch.Tensor(obs).to(device)).cpu()
                 #print(q_values, avail_actions, q_values*avail_actions)
                 #considered_q_values = q_values*avail_actions
-                considered_q_values = q_values + (avail_actions-1)*9999
+                considered_q_values = q_values + (avail_actions-1)*np.inf
                 actions = torch.argmax(considered_q_values).numpy()
 
         avail_actions_ind = np.nonzero(avail_actions)[0]
@@ -251,7 +257,7 @@ class QAgent():
     def train(self, global_step):
         # ALGO LOGIC: training.
         if global_step > self.learning_starts:
-            #print("mod: ", (global_step + 100*self.id) % self.train_frequency)
+            #print("mod: ", (global_step + 100*self.agent_id ) % self.train_frequency)
             if global_step % self.train_frequency == 0:
                 data = self.replay_buffer.sample(self.batch_size)
                 #print("data: ", data)
@@ -333,19 +339,47 @@ class QAgent():
         self.replay_buffer = load_from_pkl(buffer_path)
         assert isinstance(self.replay_buffer, ReplayBuffer), "The replay buffer must inherit from ReplayBuffer class"
 
-    def visualize_q_values(self, obervation):
-        
-        for i in range(env.X_MAX):
-            for j in range(env.Y_MAX):
-                obervation[2*self.id] = x
-                obervation[2*self.id + 1] = y
+    def visualize_q_values(self, env, global_step):
+        arrows = {"1":(1,0), "3":(-1,0),"0":(0,1),"2":(0,-1)}
 
-                target_max, _ = (self.target_network(obervation)*action_mask).max(dim=1)
+        observation, _ = env.reset()
+        observation = observation[self.agent_id ]['observation']
+        observation[-1] = 5
+
+        q_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
+        #q_values = np.zeros((3,env.X_MAX, env.Y_MAX))
+        for x in range(env.X_MAX+1):
+            for y in range(env.Y_MAX+1):
+                observation[4+2*self.agent_id ] = x
+                observation[4+2*self.agent_id  + 1] = y
+                #print(observation)
+
+                action_mask= env.get_action_mask(x,y)
+                observation = observation.to(device)
+                #print(self.q_network(observation).detach().cpu()*action_mask)
+                target = (self.q_network(observation).detach().cpu()*action_mask)
+                target_max = target.max()
+                target_argmax = target.argmax()
+                #clipped_target_max = (np.clip(target_max, -10, 10) + 10)/ 20
+                #q_values[0, x, y] = clipped_target_max 
+                #q_values[1, x, y] = 1.0 - clipped_target_max
+                q_values[ x, y] = target_max
+                choosen_act = 
+
+        fig, ax = plt.subplots()
+        im = ax.imshow(q_values.T[::-1])
+
+        fig.colorbar(im, ax=ax, label='Interactive colorbar')
+
+        writer.add_figure(self.name+"/q_values_imgs", fig, global_step)
+
+        #writer.add_image(self.name+"/q_values_imgs", q_values, global_step)
 
 
-
-
-        #obervation['observation'].to(device)
+        fig, ax = plt.subplots(figsize=(6, 6))
+        for x in range(env.X_MAX+1):
+            for y in range(env.Y_MAX+1):
+                plt.arrow(c, 5-r, scale*arrows[cell][0], scale*arrows[cell][1], head_width=0.1)
 
 
 
@@ -355,6 +389,12 @@ class QAgent():
 
 
 def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False, verbose=False):
+    if visualisation:
+        obs, _ = env.reset()
+
+        for agent in env.agents:
+            q_agents[agent].visualize_q_values(env, completed_episodes)
+
     obs, _ = env.reset()
     if verbose:
         print('initial obs:', obs)
@@ -468,7 +508,7 @@ def main():
     enc = OneHotEncoder(sparse_output=False).fit(np.array(env.agents).reshape(-1, 1))
     one_hot = {agent:enc.transform(np.array([agent]).reshape(-1, 1))[0] for agent in env.agents}
 
-    q_agents = {agent:QAgent(env, agent, i, args, size_obs, size_act, one_hot[agent])  for i, agent in enumerate(env.agents)}
+    q_agents = {a:QAgent(env, agent, a, args, size_obs, size_act)  for a in env.agents} #, one_hot[a]
     if args.load_agents_from is not None:
         for name, agent in q_agents.items():
             model_path = f"runs/{args.load_agents_from}/saved_models/{name}.cleanrl_model"
