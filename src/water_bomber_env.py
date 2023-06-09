@@ -36,7 +36,8 @@ class WaterBomberEnv(ParallelEnv):
     self.agents = copy(self.possible_agents)
 
     self.fires = [[2,3],[4,3]]
-    self.water_bombers = [[0,2],[2,2]]
+    #self.water_bombers = [[0,2],[2,2]]
+    self.water_bombers = [[0,2],[4,3]]
 
     self.has_finished = [False]*self.N_AGENTS
 
@@ -67,7 +68,6 @@ class WaterBomberEnv(ParallelEnv):
     
 
     #terminations = {a: self.water_bombers[a] in self.fires for a in self.agents}
-    terminations = {agent: False for agent in self.agents}
 
     self.has_finished = [self.water_bombers[a] in self.fires for a in self.agents]
 
@@ -77,14 +77,20 @@ class WaterBomberEnv(ParallelEnv):
 
     infos = {a: {} for a in self.agents}
 
+    terminations = {a: False for a in self.agents}
+    #if np.all(self.has_finished):
+    #  terminations = {a: True for a in self.agents}
+      #self.agents = []
+
     truncations = {a: False for a in self.agents}
-    if self.timestep > self.T_MAX or np.all(self.has_finished):
+    observations = self._generate_observations()
+    
+    if self.timestep > self.T_MAX:
       truncations = {a: True for a in self.agents}
       self.agents = []
 
     #self.agents = [a for a in self.agents if not (terminations[a] or truncations[a])]
     
-    observations = self._generate_observations()
 
     if self.verbose:
       print()
@@ -130,33 +136,37 @@ class WaterBomberEnv(ParallelEnv):
     return fires == water_bombers
 
   def _compute_reward(self):
-    if self._is_terminated():
-      return 15.0
+    #if self._is_terminated():
+    if np.all(self.has_finished):
+      return 1.0 #15.0
       #return 1.0-0.01*factorielle(self.timestep)
     else:
-      return -1.0
+      return 0.0 #-1.0
+
+  def get_action_mask(self, x, y):
+    action_mask = np.ones(5)
+    if [x,y] in self.fires: #self.has_finished[agent]:
+      action_mask = np.array([0,0,0,0,1])
+    else:
+      action_mask[-1] = 0
+
+    if y==self.Y_MAX or [x,y+1] in self.water_bombers:
+      action_mask[0] = 0
+    if x==self.X_MAX or [x+1,y] in self.water_bombers:
+      action_mask[1] = 0
+    if y==0 or [x,y-1] in self.water_bombers:
+      action_mask[2] = 0
+    if x==0 or [x-1,y] in self.water_bombers:
+      action_mask[3] = 0
+
+    return action_mask
 
   def _generate_observations(self):
     action_masks = {}
     for agent in self.agents:
       x, y = self.water_bombers[agent]
-      action_mask = np.ones(5)
 
-      if self.has_finished[agent]:
-        action_mask = np.array([0,0,0,0,1])
-      else:
-        action_mask[-1] = 0
-
-      if y==self.Y_MAX or [x,y+1] in self.water_bombers:
-        action_mask[0] = 0
-      if x==self.X_MAX or [x+1,y] in self.water_bombers:
-        action_mask[1] = 0
-      if y==0 or [x,y-1] in self.water_bombers:
-        action_mask[2] = 0
-      if x==0 or [x-1,y] in self.water_bombers:
-        action_mask[3] = 0
-
-      action_masks[agent] = action_mask
+      action_masks[agent] = self.get_action_mask(x,y)
 
     observations = {
       a: {
