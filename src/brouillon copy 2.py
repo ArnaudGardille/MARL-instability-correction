@@ -16,7 +16,7 @@ petit_point = TensorDict(
     },
     batch_size=[],
 )
-
+"""
 point = TensorDict(
     {
         "a": torch.arange(120).view(1, -1),
@@ -33,7 +33,7 @@ data = TensorDict(
         ("b", "c"): torch.arange(150).view(30, 5),
     },
     batch_size=[30],
-)
+)"""
 storage=LazyMemmapStorage(size)
 
 rb = TensorDictReplayBuffer(
