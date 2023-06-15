@@ -34,7 +34,6 @@ from torch.utils.tensorboard import SummaryWriter
 import stable_baselines3 as sb3
 
 from pettingzoo.test import api_test
-from sklearn.preprocessing import OneHotEncoder
 
 from pettingzoo.mpe import simple_v3, simple_spread_v3
 from supersuit import dtype_v0
@@ -219,7 +218,7 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     
 
 class QAgent():
-    def __init__(self, env, name, args, obs_shape, act_shape, one_hot=None):
+    def __init__(self, env, name, args, obs_shape, act_shape):
         for k, v in vars(args).items():
             setattr(self, k, v)
 
@@ -247,6 +246,7 @@ class QAgent():
             'action_mask': env.observation_space(self.name)['action_mask']
         })"""
 
+
         self.replay_buffer = DictReplayBuffer(
             self.buffer_size,
             env.observation_space(self.name), #env.observation_space(self.name)
@@ -254,16 +254,10 @@ class QAgent():
             device,handle_timeout_termination=False,
             )
 
-        #self.obs = None
-        if args.add_id:
-            assert one_hot is not None
-            self.one_hot = torch.tensor(one_hot, dtype=float)
-
 
     def act(self, dict_obs, completed_episodes, training=True):
         obs, avail_actions = dict_obs['observation'], dict_obs['action_mask']
-        #if args.add_id:
-        #    dict_obs['observation'] = np.concatenate([obs, self.one_hot]) 
+        obs = torch.Tensor(obs)
 
         #assert obs[-2] == self.agent_id
         avail_actions_ind = np.nonzero(avail_actions)[0]
@@ -279,11 +273,10 @@ class QAgent():
                 #print(q_values, avail_actions, q_values*avail_actions)
                 #considered_q_values = q_values*avail_actions
                 considered_q_values = q_values + (avail_actions-1.0)*9999.0
-
                 actions = torch.argmax(considered_q_values).numpy()
 
         avail_actions_ind = np.nonzero(avail_actions)[0]
-        assert actions in avail_actions_ind
+        assert actions in avail_actions_ind, (actions, avail_actions_ind)
 
         if completed_episodes % self.train_frequency == 0:
             writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
@@ -308,11 +301,6 @@ class QAgent():
                 normalized_next_obs = self.env.normalize_obs(next_observations).to(device)
                 next_action_mask = data.next_observations['action_mask']
                 #assert next_observations[0][-2] == self.agent_id
-                
-                #if args.add_id:
-                #    batch_one_hot = self.one_hot.repeat(self.batch_size,1).to(device)
-                    #one_hot = torch.full((self.batch_size,8),self.one_hot, device=device)
-                #    next_observations = torch.cat([next_observations, batch_one_hot], axis=1) 
                 
                 with torch.no_grad():
                     target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
@@ -350,16 +338,7 @@ class QAgent():
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
 
-        #if args.add_id:
-            #self.one_hot.to(device)
-            
-            #one_hot = torch.full((self.batch_size,8),self.one_hot, device=device)
-        #    obs['observation'] = np.concatenate([obs['observation'], self.one_hot]) 
-        #    next_obs['observation'] = np.concatenate([next_obs['observation'], self.one_hot]) 
-        #if truncated:
-        #    real_next_obs = infos["final_observation"]
-        #    print('real_next_obs:', real_next_obs)
-        self.replay_buffer.add(obs, real_next_obs, action, reward, terminated or truncated, infos)
+        self.replay_buffer.add(obs, next_obs, action, reward, terminated or truncated, infos)
 
 
     def save(self):
@@ -460,19 +439,17 @@ class QAgent():
 
 
 def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False, verbose=False):
-    if visualisation:
+    if visualisation and False:
         obs, _ = env.reset()
 
         for agent in env.agents:
             q_agents[agent].visualize_q_values(env, completed_episodes)
 
     obs, _ = env.reset()
+    optimal_reward = env.compute_optimal_reward()
+
     if verbose:
         print('initial obs:', obs)
-
-    if args.add_id:
-        for agent in obs:
-            obs[agent]['observation'] = np.concatenate([obs[agent]['observation'], q_agents[agent].one_hot]) 
 
     #episodic_returns = {}
     episodic_return = 0.0
@@ -498,11 +475,6 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
             print("next_obs:", next_obs)
             print("rewards:", rewards)
 
-        if args.add_id:
-            for agent in next_obs:
-                next_obs[agent]['observation'] = np.concatenate([next_obs[agent]['observation'], q_agents[agent].one_hot]) 
-
-        
         #if training:
         # On entraine pas, mais on complete quand meme le replay buffer
         for agent in obs:
@@ -539,7 +511,7 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
             for agent in q_agents.values():
                 agent.train(completed_episodes)
 
-    return nb_steps, episodic_return #episodic_returns
+    return nb_steps, episodic_return/optimal_reward #episodic_returns
     
 def test():
     env = simple_spread_v3.env(N=2)
@@ -573,7 +545,7 @@ def test():
 def main():
 
     ### Creating Env
-    env = WaterBomberEnv(x_max=14, y_max=4, t_max=20, n_agents=2, deterministic=False)
+    env = WaterBomberEnv(x_max=14, y_max=4, t_max=20, n_agents=2, deterministic=False, add_id=args.add_id)
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
@@ -583,9 +555,9 @@ def main():
     print(env.observation_space(agent_0))
     obs_shape = env.observation_space(agent_0)['observation'].shape
     size_obs = np.product(obs_shape)
-    
+
     size_act = int(env.action_space(agent_0).n)
-    
+    print('observation_space:',env.observation_space(agent_0)['observation'])
     
     print('-'*20)
     print('agents: ',env.agents)
@@ -599,10 +571,8 @@ def main():
     
     ### Creating Agents
     
-    enc = OneHotEncoder(sparse_output=False).fit(np.array(env.agents).reshape(-1, 1))
-    one_hot = {agent:enc.transform(np.array([agent]).reshape(-1, 1))[0] for agent in env.agents}
 
-    q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents} #, one_hot[a]
+    q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents} 
     
     if args.load_agents_from is not None:
         for name, agent in q_agents.items():

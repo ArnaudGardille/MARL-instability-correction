@@ -118,6 +118,8 @@ class WaterBomberEnv(ParallelEnv):
       print("terminations",terminations)
       print("truncations",truncations)
 
+      
+
     return observations, rewards, terminations, truncations, infos
 
 
@@ -168,33 +170,29 @@ class WaterBomberEnv(ParallelEnv):
   def get_action_mask(self, x, y):
     #x, y = self.water_bombers[]
 
-    action_mask = np.ones(5)
+    action_mask = np.ones((1,5))
     if [x,y] in self.fires: #self.has_finished[agent]:
-      action_mask = np.array([0,0,0,0,1])
+      action_mask = np.array([[0,0,0,0,1]])
     else:
-      action_mask[-1] = 0
+      action_mask[0,-1] = 0
 
     occupied_positions = list(self.water_bombers.values())
     if y==self.Y_MAX or [x,y+1] in occupied_positions:
-      action_mask[0] = 0
+      action_mask[0,0] = 0
     if x==self.X_MAX or [x+1,y] in occupied_positions:
-      action_mask[1] = 0
+      action_mask[0,1] = 0
     if y==0 or [x,y-1] in occupied_positions:
-      action_mask[2] = 0
+      action_mask[0,2] = 0
     if x==0 or [x-1,y] in occupied_positions:
-      action_mask[3] = 0
+      action_mask[0,3] = 0
 
     return action_mask
 
   def normalize_obs(self, obs):
     # ASSUMES ALL AGENTS HAVE SAME OBS SPACE
-    normalized_obs = copy(obs)
-    normalized_obs['observation']
-
     agent = self.possible_agents[0]
-    normalized_obs['observation'] = 2*normalized_obs['observation'].cpu()/(self.observation_space(agent)['observation'].nvec-1) - 1.0
-    normalized_obs['observation'] = normalized_obs['observation'].float()
-    return normalized_obs
+    normalized_obs = 2*obs.cpu()/(self.observation_space(agent)['observation'].nvec-1) - 1.0
+    return normalized_obs.float()
 
   def _generate_observations(self):
     action_masks = {}
@@ -210,10 +208,10 @@ class WaterBomberEnv(ParallelEnv):
     for a in self.agents:
       obs_perso = np.concatenate((obs, self.one_hot[a])) if self.add_id else obs
       observations[a] = {
-        "observation":torch.tensor(obs_perso, dtype=torch.float), #+ [self.timestep]
-        "action_mask":torch.tensor(action_masks[a], dtype=torch.float)
+        "observation":torch.tensor([obs_perso], dtype=torch.float), #+ [self.timestep]
+        "action_mask":action_masks[a]
       }
-
+      
     return observations
 
   def compute_optimal_reward(self):
@@ -233,7 +231,7 @@ if __name__ == "__main__":
   total_reward = 0.0
   while env.agents:
     # this is where you would insert your policy
-    actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'])[0]) for agent in env.agents}  
+    actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'][0])[0]) for agent in env.agents}  
 
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
     #print("actions:",actions)
