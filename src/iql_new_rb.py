@@ -80,6 +80,7 @@ def parse_args():
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to save images of the V or Q* functions")
+    parser.add_argument("--run-name", type=str, default=None,
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="smac-v1",
@@ -143,7 +144,11 @@ def load_experiment(run_name, load_buffer=False):
     q_agents = None
     return q_agents
 
-run_name = f"iql_{int(time.time())}"
+if args.run_name is not None:
+    run_name = args.run_name
+else:
+    run_name = f"iql_{int(time.time())}"
+
 if args.save_model:
     os.makedirs(f"runs/{run_name}/saved_models", exist_ok=True)
 
@@ -266,7 +271,7 @@ class QAgent():
             )"""
         self.rb_storage = LazyTensorStorage(self.buffer_size)
         
-        if args.prioritized_rb:
+        if args.rb == 'prioritized':
             #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
             self.replay_buffer = TensorDictPrioritizedReplayBuffer(
                 alpha = 0.7,
@@ -277,6 +282,7 @@ class QAgent():
                 #collate_fn=lambda x: x, 
                 batch_size=self.batch_size,
             )
+            
         else:
             self.replay_buffer = TensorDictReplayBuffer(
                 #self.replay_buffer = TensorDictReplayBuffer(
@@ -286,6 +292,21 @@ class QAgent():
                 priority_key="td_error",
                 batch_size=self.batch_size,
             )
+
+            if args.rb =='laber':
+                self.smaller_buffer_size = self.buffer_size//10
+
+                self.smaller_buffer = TensorDictPrioritizedReplayBuffer(
+                    alpha = 1.0, #0.7,
+                    beta = 1.0, #1.1,
+                    priority_key="td_error",
+                    #storage=ListStorage(self.buffer_size),
+                    storage=LazyTensorStorage(self.smaller_buffer_size),
+                    #collate_fn=lambda x: x, 
+                    batch_size=self.batch_size,
+            )
+
+
 
         self.rb_storage = LazyMemmapStorage(self.buffer_size)
         
@@ -327,9 +348,30 @@ class QAgent():
         if completed_episodes > self.learning_starts:
             #print("mod: ", (completed_episodes + 100*self.agent_id ) % self.train_frequency)
             if completed_episodes % self.train_frequency == 0:
-                sample = self.replay_buffer.sample()
+                if args.rb =='laber':
+                    # On met a jour les TD errors 
+                    for _ in range((self.smaller_buffer_size // self.buffer_size)+1):
+                        sample = self.replay_buffer.sample()
+                        sample = sample.to(device)
+                        normalized_obs = sample['observations']['observation']
+                        action_mask = sample['observations']['action_mask']
+                        normalized_next_obs = sample['next_observations']['observation']
+                        next_action_mask = sample['next_observations']['action_mask']
+                        
+                        with torch.no_grad():
+                            target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
+                            td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
+                            old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
+
+                            sample.set("td_error",torch.abs(td_target-old_val))
+
+                        self.smaller_buffer.extend(sample)
+
+                    sample = self.smaller_buffer.sample()
+                else:
+                    sample = self.replay_buffer.sample()
                 
-                #if args.prioritized_rb:
+                #if args.rb == 'prioritized':
                 #    print('index', sample["index"])
                 #print('sample:', sample)
                 sample = sample.to(device)
@@ -350,7 +392,7 @@ class QAgent():
 
                 loss = F.mse_loss(td_target, old_val)
                 
-                if args.prioritized_rb:
+                if args.rb == 'prioritized':
                     sample.set("td_error",torch.abs(td_target-old_val))
                     self.replay_buffer.update_tensordict_priority(sample)
 
@@ -603,7 +645,7 @@ def test():
 def main():
 
     ### Creating Env
-    env = WaterBomberEnv(x_max=4, y_max=4, t_max=20, n_agents=2, deterministic=False)
+    env = WaterBomberEnv(x_max=4, y_max=4, t_max=20, n_agents=2)
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
