@@ -80,7 +80,7 @@ def parse_args():
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to save images of the V or Q* functions")
-    parser.add_argument("--run-name", type=str, default=None,
+    parser.add_argument("--run-name", type=str, default=None)
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="smac-v1",
