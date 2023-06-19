@@ -318,7 +318,7 @@ class QAgent():
             #print("mod: ", (completed_episodes + 100*self.agent_id ) % self.train_frequency)
             if completed_episodes % self.train_frequency == 0:
                 sample = self.replay_buffer.sample()
-                print('index', sample["index"])
+                #print('index', sample["index"])
                 #print('sample:', sample)
                 sample = sample.to(device)
                 #action_mask = data.next_observations['action_mask']
@@ -547,8 +547,6 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
         nb_steps += 1
 
         obs = next_obs
-
-    
 
     if training:
         if args.single_agent:
