@@ -47,7 +47,7 @@ from gymnasium.spaces import *
 from torchrl.data import TensorDictReplayBuffer
 from tensordict import tensorclass, TensorDict
 from torchrl.data.replay_buffers.samplers import RandomSampler, PrioritizedSampler
-from torchrl.data import LazyTensorStorage, LazyMemmapStorage, ListStorage
+from torchrl.data import LazyTensorStorage, LazyMemmapStorage, ListStorage, TensorDictPrioritizedReplayBuffer
 
 def parse_args():
     # fmt: off
@@ -124,6 +124,7 @@ def parse_args():
         help="whether to add agents identity to observation")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to use a dueling network architecture.")
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform')
     parser.add_argument("--prioritized-rb", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
@@ -163,7 +164,7 @@ writer.add_text(
     "hyperparameters",
     "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
 )
-writer.add_hparams(vars(args), {})
+#writer.add_hparams(vars(args), {})
 writer.flush()
 
 # TRY NOT TO MODIFY: seeding
@@ -263,22 +264,31 @@ class QAgent():
             env.action_space(self.name),
             device,handle_timeout_termination=False,
             )"""
+        self.rb_storage = LazyTensorStorage(self.buffer_size)
         
         if args.prioritized_rb:
-            sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
+            #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
+            self.replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha = 0.7,
+                beta = 1.1,
+                priority_key="td_error",
+                #storage=ListStorage(self.buffer_size),
+                storage=self.rb_storage,
+                #collate_fn=lambda x: x, 
+                batch_size=self.batch_size,
+            )
         else:
-            sampler = RandomSampler()
+            self.replay_buffer = TensorDictReplayBuffer(
+                #self.replay_buffer = TensorDictReplayBuffer(
+                #storage=ListStorage(self.buffer_size),
+                storage=self.rb_storage,
+                #collate_fn=lambda x: x, 
+                priority_key="td_error",
+                batch_size=self.batch_size,
+            )
 
         self.rb_storage = LazyMemmapStorage(self.buffer_size)
-
-        self.replay_buffer = TensorDictReplayBuffer(
-            #storage=ListStorage(self.buffer_size),
-            storage=self.rb_storage,
-            sampler=sampler,
-            #collate_fn=lambda x: x, 
-            priority_key="td_error",
-            batch_size=self.batch_size,
-            )
+        
 
     def act(self, dict_obs, completed_episodes, training=True):
         normalized_obs = self.env.normalize_obs(dict_obs)
@@ -305,7 +315,7 @@ class QAgent():
         avail_actions_ind = np.nonzero(avail_actions)
         assert actions in avail_actions_ind
 
-        if completed_episodes % self.train_frequency == 0:
+        if completed_episodes % 1000 == 0:
             writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
             writer.add_scalar(self.name+"/action", actions, completed_episodes)
 
@@ -318,7 +328,9 @@ class QAgent():
             #print("mod: ", (completed_episodes + 100*self.agent_id ) % self.train_frequency)
             if completed_episodes % self.train_frequency == 0:
                 sample = self.replay_buffer.sample()
-                #print('index', sample["index"])
+                
+                #if args.prioritized_rb:
+                #    print('index', sample["index"])
                 #print('sample:', sample)
                 sample = sample.to(device)
                 #action_mask = data.next_observations['action_mask']
@@ -339,7 +351,7 @@ class QAgent():
                 loss = F.mse_loss(td_target, old_val)
                 
                 if args.prioritized_rb:
-                    sample["td_error"] = torch.abs(td_target-old_val)
+                    sample.set("td_error",torch.abs(td_target-old_val))
                     self.replay_buffer.update_tensordict_priority(sample)
 
                 writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
@@ -413,9 +425,9 @@ class QAgent():
     def visualize_q_values(self, env, completed_episodes):
         arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-        observation, _ = env.reset()
-        observation = observation[self.name]['observation']
-        observation[-1] = 5
+        observation, _ = env.reset(deterministic=True)
+        observation = observation[self.name] #['observation']
+        #observation['observation'][-1] = 5
         #assert observation[-2] == self.agent_id
 
         q_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
@@ -425,15 +437,16 @@ class QAgent():
         #q_values = np.zeros((3,env.X_MAX, env.Y_MAX))
         for x in range(env.X_MAX+1):
             for y in range(env.Y_MAX+1):
-                observation[4+2*self.agent_id ] = x
-                observation[4+2*self.agent_id  + 1] = y
+                #observation['observation'][4+2*self.agent_id ] = x
+                #observation['observation'][4+2*self.agent_id  + 1] = y
                 #print(observation)
 
                 action_mask= env.get_action_mask(x,y)
                 normalized_obs = self.env.normalize_obs(observation)
-                normalized_obs = normalized_obs.to(device)
+                #print('normalized_obs:', normalized_obs)
+                normalized_obs = TensorDict(normalized_obs, batch_size=[]).to(device)
                 #print(self.q_network(observation).detach().cpu()*action_mask)
-                pred = self.q_network(normalized_obs).detach().cpu()
+                pred = self.q_network(normalized_obs['observation']).detach().cpu()
                 target = pred + (action_mask-1)*9999.0
                 #target = torch.argmax(considered_q_values).numpy()
 
@@ -443,7 +456,7 @@ class QAgent():
                 target_argmax = target.argmax()
 
                 if self.dueling:
-                    v_values[ x, y] = self.q_network(normalized_obs, value_only=True).detach().cpu()
+                    v_values[ x, y] = self.q_network(normalized_obs['observation'], value_only=True).detach().cpu()
 
                 #clipped_target_max = (np.clip(target_max, -10, 10) + 10)/ 20
                 #q_values[0, x, y] = clipped_target_max 
@@ -663,8 +676,8 @@ def main():
             pbar.set_description(f"Return={average_return:5.1f}, Duration={average_duration:5.1f}")
             
 
-    for agent in q_agents:
-        q_agents[agent].save_buffer()
+    #for agent in q_agents:
+    #    q_agents[agent].save_buffer()
 
     env.close()
 

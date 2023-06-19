@@ -19,16 +19,13 @@ class WaterBomberEnv(ParallelEnv):
     "name": "water-bomber-env_v0",
   }
 
-  def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, deterministic=False, add_id=False):
+  def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, add_id=False):
 
     self.X_MAX = x_max
     self.Y_MAX = y_max
     self.T_MAX = t_max
     self.N_AGENTS = n_agents
 
-    self.deterministic = deterministic
-    if self.deterministic:
-      assert x_max==4 and y_max==4 and t_max==20 and n_agents==2
 
     self.possible_agents = ["water_bomber_"+str(i) for i in range(n_agents)]
     self.symbols = {"water_bomber_"+str(i):str(i) for i in range(n_agents)}
@@ -41,10 +38,11 @@ class WaterBomberEnv(ParallelEnv):
       self.one_hot = {agent:enc.transform(np.array([agent]).reshape(-1, 1))[0] for agent in self.possible_agents}
 
 
-  def reset(self, seed=None, options=None):
+  def reset(self, seed=None, options=None, deterministic=False):
     self.agents = copy(self.possible_agents)
 
-    if self.deterministic:
+    if deterministic:
+      assert x_max==4 and y_max==4 and t_max==20 and n_agents==2
       self.fires = [[2,3],[4,3]]
       self.water_bombers = {"water_bomber_0":[0,2],"water_bomber_1":[2,2]}
     else:

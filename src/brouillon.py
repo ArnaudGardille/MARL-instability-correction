@@ -23,3 +23,13 @@ sample = buffer_lazymemmap.sample()
 print("sample:", sample['index6'])
 indices = buffer_lazymemmap.extend(data)
 print(indices)
+
+
+
+
+
+
+
+
+
+
