@@ -125,8 +125,8 @@ def parse_args():
         help="whether to add agents identity to observation")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to use a dueling network architecture.")
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform')
-    parser.add_argument("--prioritized-rb", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
     # fmt: on
@@ -542,12 +542,12 @@ class QAgent():
 
 def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False, verbose=False):
     if visualisation and args.save_imgs:
-        obs, _ = env.reset()
+        obs, _ = env.reset(deterministic=args.deterministic_env)
 
         for agent in env.agents:
             q_agents[agent].visualize_q_values(env, completed_episodes)
 
-    obs, _ = env.reset()
+    obs, _ = env.reset(deterministic=args.deterministic_env)
     optimal_reward = env.compute_optimal_reward()
 
     if verbose:
@@ -616,7 +616,7 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
 def test():
     env = simple_spread_v3.env(N=2)
     #simple_v3.env()
-    env.reset()
+    env.reset(deterministic=args.deterministic_env)
 
     agent_0 = env.agents[0]
 
@@ -649,7 +649,7 @@ def main():
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
-    env.reset()
+    env.reset(deterministic=args.deterministic_env)
 
     agent_0 = env.agents[0]
     print(env.observation_space(agent_0))

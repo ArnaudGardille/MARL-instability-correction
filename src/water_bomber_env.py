@@ -133,7 +133,7 @@ class WaterBomberEnv(ParallelEnv):
 
   @functools.lru_cache(maxsize=None)
   def observation_space(self, agent):
-    l = sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(2*self.N_AGENTS)]+[[self.T_MAX]], [])
+    l = sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(2*self.N_AGENTS)], []) #+[[self.T_MAX]]
     if self.add_id:
       l += self.length_id*[2]
     return Dict({
@@ -203,7 +203,7 @@ class WaterBomberEnv(ParallelEnv):
 
     occupied_positions = list(self.water_bombers.values())
 
-    obs = sum(self.fires + occupied_positions +[[self.timestep]], [])
+    obs = sum(self.fires + occupied_positions , []) #+[[self.timestep]]
     observations = {}
     for a in self.agents:
       obs_perso = np.concatenate((obs, self.one_hot[a])) if self.add_id else obs
