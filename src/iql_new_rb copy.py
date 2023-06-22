@@ -115,7 +115,7 @@ def parse_args():
         help="the ending epsilon for exploration")
     parser.add_argument("--exploration-fraction", type=float, default=0.5,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
-    parser.add_argument("--learning-starts", type=int, default=1000,
+    parser.add_argument("--learning-starts", type=int, default=100,
         help="timestep to start learning")
     parser.add_argument("--train-frequency", type=int, default=10,
         help="the frequency of training")
@@ -330,35 +330,34 @@ class QAgent():
         
 
         if training and not self.boltzmann_policy and (random.random() < epsilon):
-            action = int(np.random.choice(avail_actions_ind))
+            action = torch.tensor([np.random.choice(avail_actions_ind)])
             probability = epsilon/sum(avail_actions)
         else:
             with torch.no_grad():
                 q_values = self.q_network(torch.Tensor(obs).to(device)).cpu()
-                #print(q_values, avail_actions, q_values*avail_actions)
-                #considered_q_values = q_values*avail_actions
 
                 if self.boltzmann_policy:
-                    considered_q_values = q_values + (avail_actions-1.0)*torch.inf
-                    probabilities = torch.softmax(torch.tensor(considered_q_values), -1)
+                    tres = torch.nn.Threshold(0.001, 0.001)
+                    probabilities = tres(q_values)*avail_actions
+                    min_q_value = torch.min(q_values + (1.0-avail_actions)*9999.0)
+                    probabilities -= probabilities.min()
+                    probabilities /= probabilities.sum()
+
                     action = torch.multinomial(probabilities, 1)
                     probability = probabilities[action]
                 else:
 
                     considered_q_values = q_values + (avail_actions-1.0)*9999.0
-                    action = int(torch.argmax(considered_q_values).numpy())
-                    probability = 1.0-epsilon
-                    #probabilities = avail_actions*(epsilon/sum(avail_actions))
-                    #probabilities[best_action] = 1-epsilon
+                    action = torch.argmax(considered_q_values).reshape(1)
+                    probability = 1.0-epsilon if training else 1.0
 
-        assert probability > 0.0 
+        assert probability > 0.0 , (probability, epsilon)
         avail_actions_ind = np.nonzero(avail_actions)
         assert action in avail_actions_ind
 
         if completed_episodes % 1000 == 0:
             writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
             writer.add_scalar(self.name+"/action", action, completed_episodes)
-
 
         return action, probability
 
@@ -407,10 +406,12 @@ class QAgent():
                 with torch.no_grad():
                     target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
                     td_target = sample['rewards'][self.name].flatten() + self.gamma * target_max * (1 - sample['dones'][self.name].flatten())
+                #print(self.q_network(normalized_obs).shape, action_mask.shape, sample['actions'][self.name].shape)
+                #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
                 old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
 
                 if self.corrected_loss:
-                    weight = self.importance_weight(sample)
+                    weight = self.importance_weight(sample, completed_episodes)
                     loss = weighted_mse_loss(td_target, old_val, weight)
                 else:
                     loss = F.mse_loss(td_target, old_val)
@@ -446,23 +447,26 @@ class QAgent():
     def add_to_rb(self, obs, action, probabilities, reward, next_obs, terminated, truncated=False, infos=None):
         
         #normalized_obs = copy(obs)
+        normalized_obs, normalized_next_obs, dones = {}, {}, {}
+        for a in self.env.agents:
+            normalized_obs[a] = self.env.normalize_obs(obs[a])
+            normalized_next_obs[a] = self.env.normalize_obs(next_obs[a])
+            dones[a] = torch.tensor(terminated[a] or truncated[a], dtype=torch.float)
+        #normalized_obs = self.env.normalize_obs(obs)
 
-        normalized_obs = self.env.normalize_obs(obs)
-
-        #normalized_obs = copy(obs)
-        normalized_next_obs = self.env.normalize_obs(next_obs)
+        #normalized_next_obs = self.env.normalize_obs(next_obs)
 
         transition = {
             'observations':normalized_obs,
-            'actions':[action],
+            'actions':action,
             'actions_likelihood':probabilities,
             'rewards':reward,
             'next_observations':normalized_next_obs,
-            'dones':torch.tensor(terminated or truncated, dtype=torch.float),
+            'dones':dones,
             #'infos':infos
         }
-        transition = TensorDict(transition,batch_size=[])
         #print('transition:', transition)
+        transition = TensorDict(transition,batch_size=[])
         self.replay_buffer.add(transition)
 
 
@@ -556,20 +560,44 @@ class QAgent():
 
             writer.add_figure(self.name+"/v_values_imgs", fig, completed_episodes)
         
-    def importance_weight(self, sample):
-        num, denom = 0.0, 0.0
+    def importance_weight(self, sample, completed_episodes):
+        num, denom = 1.0, 1.0
+        print('agents:', self.env.agents)
 
-        for agent in env.agents:
+        for agent in self.env.possible_agents:
             if agent != self.name:
+                print("agent:", agent)
                 sample = sample.to(device)
-                #action_mask = data.next_observations['action_mask']
                 normalized_obs = sample['observations'][self.name]['observation']
-                #normalized_obs = self.env.normalize_obs(observations).to(device)
                 action_mask = sample['observations'][self.name]['action_mask']
+
+                if self.boltzmann_policy:
+                    with torch.no_grad():
+                        q_values = self.q_network(torch.Tensor(normalized_obs).to(device)).cpu()
+
+                        tres = torch.nn.Threshold(0.001, 0.001)
+                        probabilities = tres(q_values)*avail_actions
+                        min_q_value = torch.min(q_values + (1.0-avail_actions)*9999.0)
+                        probabilities -= probabilities.min()
+                        probabilities /= probabilities.sum()
+
+                        probability = probabilities[sample['actions']]
+                    num *= probability
+                else:
+                    num *= linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
+                     
+                denom *= sample['actions_likelihood'][agent]
+
+        #print("num:", num)
+        #print("denom:", denom)
+        #print("ratio:", num/denom)
+        return num/denom
                 
+                    
+                        
 
 
-        
+                
 
  
 
