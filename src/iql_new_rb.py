@@ -25,24 +25,29 @@ import torch.optim as optim
 from collections import Counter
 #from stable_baselines3 import DQN
 
-from stable_baselines3.common.buffers import ReplayBuffer, DictReplayBuffer
-from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
+#from stable_baselines3.common.buffers import ReplayBuffer, DictReplayBuffer
+#from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
-from smac.env.pettingzoo import StarCraft2PZEnv
+#from smac.env.pettingzoo import StarCraft2PZEnv
 from torch.utils.tensorboard import SummaryWriter
 
-import stable_baselines3 as sb3
+#import stable_baselines3 as sb3
 
 from pettingzoo.test import api_test
 
-from pettingzoo.mpe import simple_v3, simple_spread_v3
-from supersuit import dtype_v0
+#from pettingzoo.mpe import simple_v3, simple_spread_v3
+#from supersuit import dtype_v0
 
-import pandas as pd 
+#import pandas as pd 
 
 import matplotlib.pyplot as plt
 
 from gymnasium.spaces import *
+
+from torchrl.data import TensorDictReplayBuffer
+from tensordict import tensorclass, TensorDict
+from torchrl.data.replay_buffers.samplers import RandomSampler, PrioritizedSampler
+from torchrl.data import LazyTensorStorage, LazyMemmapStorage, ListStorage, TensorDictPrioritizedReplayBuffer
 
 def parse_args():
     # fmt: off
@@ -73,6 +78,9 @@ def parse_args():
         help="the user or org name of the model repository from the Hugging Face Hub")
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
+    parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="whether to save images of the V or Q* functions")
+    parser.add_argument("--run-name", type=str, default=None)
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", type=str, default="smac-v1",
@@ -95,11 +103,11 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=1.,
         help="the target network update rate")
-    parser.add_argument("--evaluation-frequency", type=int, default=100)
+    parser.add_argument("--evaluation-frequency", type=int, default=1000)
     parser.add_argument("--evaluation-episodes", type=int, default=100)
     parser.add_argument("--target-network-frequency", type=int, default=500,
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int, default= 10000, #2**18, #256, #
+    parser.add_argument("--batch-size", type=int, default= 100, #2**18, #256, #
         help="the batch size of sample from the reply memory")
     parser.add_argument("--start-e", type=float, default=1,
         help="the starting epsilon for exploration")
@@ -117,6 +125,9 @@ def parse_args():
         help="whether to add agents identity to observation")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to use a dueling network architecture.")
+    parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
+        help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
@@ -133,7 +144,11 @@ def load_experiment(run_name, load_buffer=False):
     q_agents = None
     return q_agents
 
-run_name = f"iql_{int(time.time())}"
+if args.run_name is not None:
+    run_name = args.run_name
+else:
+    run_name = f"iql_{int(time.time())}"
+
 if args.save_model:
     os.makedirs(f"runs/{run_name}/saved_models", exist_ok=True)
 
@@ -154,6 +169,8 @@ writer.add_text(
     "hyperparameters",
     "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
 )
+#writer.add_hparams(vars(args), {})
+writer.flush()
 
 # TRY NOT TO MODIFY: seeding
 random.seed(args.seed)
@@ -246,18 +263,59 @@ class QAgent():
             'action_mask': env.observation_space(self.name)['action_mask']
         })"""
 
-
-        self.replay_buffer = DictReplayBuffer(
+        """self.replay_buffer = DictReplayBuffer(
             self.buffer_size,
             env.observation_space(self.name), #env.observation_space(self.name)
             env.action_space(self.name),
             device,handle_timeout_termination=False,
+            )"""
+        self.rb_storage = LazyTensorStorage(self.buffer_size)
+        
+        if args.rb == 'prioritized':
+            #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
+            self.replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha = 0.7,
+                beta = 1.1,
+                priority_key="td_error",
+                #storage=ListStorage(self.buffer_size),
+                storage=self.rb_storage,
+                #collate_fn=lambda x: x, 
+                batch_size=self.batch_size,
+            )
+            
+        else:
+            self.replay_buffer = TensorDictReplayBuffer(
+                #self.replay_buffer = TensorDictReplayBuffer(
+                #storage=ListStorage(self.buffer_size),
+                storage=self.rb_storage,
+                #collate_fn=lambda x: x, 
+                priority_key="td_error",
+                batch_size=self.batch_size,
+            )
+
+            if args.rb =='laber':
+                self.smaller_buffer_size = self.buffer_size//10
+
+                self.smaller_buffer = TensorDictPrioritizedReplayBuffer(
+                    alpha = 1.0, #0.7,
+                    beta = 1.0, #1.1,
+                    priority_key="td_error",
+                    #storage=ListStorage(self.buffer_size),
+                    storage=LazyTensorStorage(self.smaller_buffer_size),
+                    #collate_fn=lambda x: x, 
+                    batch_size=self.batch_size,
             )
 
 
+
+        self.rb_storage = LazyMemmapStorage(self.buffer_size)
+        
+
     def act(self, dict_obs, completed_episodes, training=True):
-        obs, avail_actions = dict_obs['observation'], dict_obs['action_mask']
-        obs = torch.Tensor(obs)
+        normalized_obs = self.env.normalize_obs(dict_obs)
+        #dict_obs = TensorDict(dict_obs,batch_size=[])
+
+        obs, avail_actions = normalized_obs['observation'], normalized_obs['action_mask']
 
         #assert obs[-2] == self.agent_id
         avail_actions_ind = np.nonzero(avail_actions)[0]
@@ -265,20 +323,20 @@ class QAgent():
         epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
 
         if training and (random.random() < epsilon):
-            actions = np.random.choice(avail_actions_ind)
+            actions = int(np.random.choice(avail_actions_ind))
         else:
             with torch.no_grad():
-                normalized_obs = self.env.normalize_obs(obs)
-                q_values = self.q_network(torch.Tensor(normalized_obs).to(device)).cpu()
+                q_values = self.q_network(torch.Tensor(obs).to(device)).cpu()
                 #print(q_values, avail_actions, q_values*avail_actions)
                 #considered_q_values = q_values*avail_actions
                 considered_q_values = q_values + (avail_actions-1.0)*9999.0
-                actions = torch.argmax(considered_q_values).numpy()
 
-        avail_actions_ind = np.nonzero(avail_actions)[0]
-        assert actions in avail_actions_ind, (actions, avail_actions_ind)
+                actions = int(torch.argmax(considered_q_values).numpy())
 
-        if completed_episodes % self.train_frequency == 0:
+        avail_actions_ind = np.nonzero(avail_actions)
+        assert actions in avail_actions_ind
+
+        if completed_episodes % 1000 == 0:
             writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
             writer.add_scalar(self.name+"/action", actions, completed_episodes)
 
@@ -290,28 +348,57 @@ class QAgent():
         if completed_episodes > self.learning_starts:
             #print("mod: ", (completed_episodes + 100*self.agent_id ) % self.train_frequency)
             if completed_episodes % self.train_frequency == 0:
-                data = self.replay_buffer.sample(self.batch_size)
-                #print("data: ", data)
-                #action_mask = data.next_observations['action_mask']
-                observations = data.observations['observation']
-                normalized_obs = self.env.normalize_obs(observations).to(device)
-                action_mask = data.observations['action_mask']
+                if args.rb =='laber':
+                    # On met a jour les TD errors 
+                    for _ in range((self.smaller_buffer_size // self.buffer_size)+1):
+                        sample = self.replay_buffer.sample()
+                        sample = sample.to(device)
+                        normalized_obs = sample['observations']['observation']
+                        action_mask = sample['observations']['action_mask']
+                        normalized_next_obs = sample['next_observations']['observation']
+                        next_action_mask = sample['next_observations']['action_mask']
+                        
+                        with torch.no_grad():
+                            target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
+                            td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
+                            old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
+
+                            sample.set("td_error",torch.abs(td_target-old_val))
+
+                        self.smaller_buffer.extend(sample)
+
+                    sample = self.smaller_buffer.sample()
+                else:
+                    sample = self.replay_buffer.sample()
                 
-                next_observations = data.next_observations['observation']
-                normalized_next_obs = self.env.normalize_obs(next_observations).to(device)
-                next_action_mask = data.next_observations['action_mask']
+                #if args.rb == 'prioritized':
+                #    print('index', sample["index"])
+                #print('sample:', sample)
+                sample = sample.to(device)
+                #action_mask = data.next_observations['action_mask']
+                normalized_obs = sample['observations']['observation']
+                #normalized_obs = self.env.normalize_obs(observations).to(device)
+                action_mask = sample['observations']['action_mask']
+                
+                normalized_next_obs = sample['next_observations']['observation']
+                #normalized_next_obs = self.env.normalize_obs(next_observations).to(device)
+                next_action_mask = sample['next_observations']['action_mask']
                 #assert next_observations[0][-2] == self.agent_id
                 
                 with torch.no_grad():
                     target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
-                    td_target = data.rewards.flatten() + self.gamma * target_max * (1 - data.dones.flatten())
-                old_val = (self.q_network(normalized_obs)*action_mask).gather(1, data.actions).squeeze()
+                    td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
+                old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
 
                 loss = F.mse_loss(td_target, old_val)
                 
+                if args.rb == 'prioritized':
+                    sample.set("td_error",torch.abs(td_target-old_val))
+                    self.replay_buffer.update_tensordict_priority(sample)
+
                 writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
                 writer.add_scalar(self.name+"/q_values", old_val.mean().item(), completed_episodes)
-                writer.add_scalar(self.name+"/replay buffer position", self.replay_buffer.pos, completed_episodes)
+                writer.add_scalar(self.name+"/size replay buffer", len(self.replay_buffer), completed_episodes)
 
                 # optimize the model
                 self.optimizer.zero_grad()
@@ -335,10 +422,24 @@ class QAgent():
 
     def add_to_rb(self, obs, action, reward, next_obs, terminated, truncated=False, infos=None):
         
-        # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
-        real_next_obs = next_obs.copy()
+        #normalized_obs = copy(obs)
 
-        self.replay_buffer.add(obs, next_obs, action, reward, terminated or truncated, infos)
+        normalized_obs = self.env.normalize_obs(obs)
+
+        #normalized_obs = copy(obs)
+        normalized_next_obs = self.env.normalize_obs(next_obs)
+        
+        transition = {
+            'observations':normalized_obs,
+            'actions':[action],
+            'rewards':reward,
+            'next_observations':normalized_next_obs,
+            'dones':torch.tensor(terminated or truncated, dtype=torch.float),
+            #'infos':infos
+        }
+        transition = TensorDict(transition,batch_size=[])
+        #print('transition:', transition)
+        self.replay_buffer.add(transition)
 
 
     def save(self):
@@ -366,9 +467,9 @@ class QAgent():
     def visualize_q_values(self, env, completed_episodes):
         arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-        observation, _ = env.reset()
-        observation = observation[self.name]['observation']
-        observation[-1] = 5
+        observation, _ = env.reset(deterministic=True)
+        observation = observation[self.name] #['observation']
+        #observation['observation'][-1] = 5
         #assert observation[-2] == self.agent_id
 
         q_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
@@ -378,15 +479,16 @@ class QAgent():
         #q_values = np.zeros((3,env.X_MAX, env.Y_MAX))
         for x in range(env.X_MAX+1):
             for y in range(env.Y_MAX+1):
-                observation[4+2*self.agent_id ] = x
-                observation[4+2*self.agent_id  + 1] = y
+                #observation['observation'][4+2*self.agent_id ] = x
+                #observation['observation'][4+2*self.agent_id  + 1] = y
                 #print(observation)
 
                 action_mask= env.get_action_mask(x,y)
                 normalized_obs = self.env.normalize_obs(observation)
-                normalized_obs = normalized_obs.to(device)
+                #print('normalized_obs:', normalized_obs)
+                normalized_obs = TensorDict(normalized_obs, batch_size=[]).to(device)
                 #print(self.q_network(observation).detach().cpu()*action_mask)
-                pred = self.q_network(normalized_obs).detach().cpu()
+                pred = self.q_network(normalized_obs['observation']).detach().cpu()
                 target = pred + (action_mask-1)*9999.0
                 #target = torch.argmax(considered_q_values).numpy()
 
@@ -396,7 +498,7 @@ class QAgent():
                 target_argmax = target.argmax()
 
                 if self.dueling:
-                    v_values[ x, y] = self.q_network(normalized_obs, value_only=True).detach().cpu()
+                    v_values[ x, y] = self.q_network(normalized_obs['observation'], value_only=True).detach().cpu()
 
                 #clipped_target_max = (np.clip(target_max, -10, 10) + 10)/ 20
                 #q_values[0, x, y] = clipped_target_max 
@@ -439,13 +541,13 @@ class QAgent():
 
 
 def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False, verbose=False):
-    if visualisation and False:
-        obs, _ = env.reset()
+    if visualisation and args.save_imgs:
+        obs, _ = env.reset(deterministic=args.deterministic_env)
 
         for agent in env.agents:
             q_agents[agent].visualize_q_values(env, completed_episodes)
 
-    obs, _ = env.reset()
+    obs, _ = env.reset(deterministic=args.deterministic_env)
     optimal_reward = env.compute_optimal_reward()
 
     if verbose:
@@ -501,8 +603,6 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
 
         obs = next_obs
 
-    
-
     if training:
         if args.single_agent:
             agent_0 = list(q_agents.values())[0]
@@ -516,7 +616,7 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
 def test():
     env = simple_spread_v3.env(N=2)
     #simple_v3.env()
-    env.reset()
+    env.reset(deterministic=args.deterministic_env)
 
     agent_0 = env.agents[0]
 
@@ -545,19 +645,19 @@ def test():
 def main():
 
     ### Creating Env
-    env = WaterBomberEnv(x_max=14, y_max=4, t_max=20, n_agents=2, deterministic=False, add_id=args.add_id)
+    env = WaterBomberEnv(x_max=4, y_max=4, t_max=20, n_agents=2)
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
-    env.reset()
+    env.reset(deterministic=args.deterministic_env)
 
     agent_0 = env.agents[0]
     print(env.observation_space(agent_0))
     obs_shape = env.observation_space(agent_0)['observation'].shape
     size_obs = np.product(obs_shape)
-
+    
     size_act = int(env.action_space(agent_0).n)
-    print('observation_space:',env.observation_space(agent_0)['observation'])
+    
     
     print('-'*20)
     print('agents: ',env.agents)
@@ -571,7 +671,6 @@ def main():
     
     ### Creating Agents
     
-
     q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents} 
     
     if args.load_agents_from is not None:
@@ -619,8 +718,8 @@ def main():
             pbar.set_description(f"Return={average_return:5.1f}, Duration={average_duration:5.1f}")
             
 
-    for agent in q_agents:
-        q_agents[agent].save_buffer()
+    #for agent in q_agents:
+    #    q_agents[agent].save_buffer()
 
     env.close()
 

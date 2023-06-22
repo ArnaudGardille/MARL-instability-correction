@@ -1,6 +1,7 @@
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data import LazyMemmapStorage, LazyTensorStorage, ListStorage
-
+from tensordict import tensorclass, TensorDict
+import torch
 # We define the maximum size of the buffer
 size = 10_000
 
@@ -19,4 +20,16 @@ buffer_lazymemmap = TensorDictReplayBuffer(
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
 sample = buffer_lazymemmap.sample()
-print("sample:", sample)
+print("sample:", sample['index6'])
+indices = buffer_lazymemmap.extend(data)
+print(indices)
+
+
+
+
+
+
+
+
+
+

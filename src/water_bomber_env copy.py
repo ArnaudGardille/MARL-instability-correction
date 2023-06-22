@@ -19,13 +19,16 @@ class WaterBomberEnv(ParallelEnv):
     "name": "water-bomber-env_v0",
   }
 
-  def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, add_id=False):
+  def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, deterministic=False, add_id=False):
 
     self.X_MAX = x_max
     self.Y_MAX = y_max
     self.T_MAX = t_max
     self.N_AGENTS = n_agents
 
+    self.deterministic = deterministic
+    if self.deterministic:
+      assert x_max==4 and y_max==4 and t_max==20 and n_agents==2
 
     self.possible_agents = ["water_bomber_"+str(i) for i in range(n_agents)]
     self.symbols = {"water_bomber_"+str(i):str(i) for i in range(n_agents)}
@@ -38,11 +41,10 @@ class WaterBomberEnv(ParallelEnv):
       self.one_hot = {agent:enc.transform(np.array([agent]).reshape(-1, 1))[0] for agent in self.possible_agents}
 
 
-  def reset(self, seed=None, options=None, deterministic=False):
+  def reset(self, seed=None, options=None):
     self.agents = copy(self.possible_agents)
 
-    if deterministic:
-      assert self.X_MAX==4 and self.Y_MAX==4 and self.T_MAX==20 and self.N_AGENTS==2
+    if self.deterministic:
       self.fires = [[2,3],[4,3]]
       self.water_bombers = {"water_bomber_0":[0,2],"water_bomber_1":[2,2]}
     else:
@@ -116,6 +118,8 @@ class WaterBomberEnv(ParallelEnv):
       print("terminations",terminations)
       print("truncations",truncations)
 
+      
+
     return observations, rewards, terminations, truncations, infos
 
 
@@ -133,7 +137,7 @@ class WaterBomberEnv(ParallelEnv):
 
   @functools.lru_cache(maxsize=None)
   def observation_space(self, agent):
-    l = sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(2*self.N_AGENTS)], []) #+[[self.T_MAX]]
+    l = sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(2*self.N_AGENTS)]+[[self.T_MAX]], [])
     if self.add_id:
       l += self.length_id*[2]
     return Dict({
@@ -166,33 +170,29 @@ class WaterBomberEnv(ParallelEnv):
   def get_action_mask(self, x, y):
     #x, y = self.water_bombers[]
 
-    action_mask = np.ones(5)
+    action_mask = np.ones((1,5))
     if [x,y] in self.fires: #self.has_finished[agent]:
-      action_mask = np.array([0,0,0,0,1])
+      action_mask = np.array([[0,0,0,0,1]])
     else:
-      action_mask[-1] = 0
+      action_mask[0,-1] = 0
 
     occupied_positions = list(self.water_bombers.values())
     if y==self.Y_MAX or [x,y+1] in occupied_positions:
-      action_mask[0] = 0
+      action_mask[0,0] = 0
     if x==self.X_MAX or [x+1,y] in occupied_positions:
-      action_mask[1] = 0
+      action_mask[0,1] = 0
     if y==0 or [x,y-1] in occupied_positions:
-      action_mask[2] = 0
+      action_mask[0,2] = 0
     if x==0 or [x-1,y] in occupied_positions:
-      action_mask[3] = 0
+      action_mask[0,3] = 0
 
     return action_mask
 
   def normalize_obs(self, obs):
     # ASSUMES ALL AGENTS HAVE SAME OBS SPACE
-    normalized_obs = copy(obs)
-    normalized_obs['observation']
-
     agent = self.possible_agents[0]
-    normalized_obs['observation'] = 2*normalized_obs['observation'].cpu()/(self.observation_space(agent)['observation'].nvec-1) - 1.0
-    normalized_obs['observation'] = normalized_obs['observation'].float()
-    return normalized_obs
+    normalized_obs = 2*obs.cpu()/(self.observation_space(agent)['observation'].nvec-1) - 1.0
+    return normalized_obs.float()
 
   def _generate_observations(self):
     action_masks = {}
@@ -203,15 +203,15 @@ class WaterBomberEnv(ParallelEnv):
 
     occupied_positions = list(self.water_bombers.values())
 
-    obs = sum(self.fires + occupied_positions , []) #+[[self.timestep]]
+    obs = sum(self.fires + occupied_positions +[[self.timestep]], [])
     observations = {}
     for a in self.agents:
       obs_perso = np.concatenate((obs, self.one_hot[a])) if self.add_id else obs
       observations[a] = {
-        "observation":torch.tensor(obs_perso, dtype=torch.float), #+ [self.timestep]
-        "action_mask":torch.tensor(action_masks[a], dtype=torch.float)
+        "observation":torch.tensor([obs_perso], dtype=torch.float), #+ [self.timestep]
+        "action_mask":action_masks[a]
       }
-
+      
     return observations
 
   def compute_optimal_reward(self):
@@ -231,7 +231,7 @@ if __name__ == "__main__":
   total_reward = 0.0
   while env.agents:
     # this is where you would insert your policy
-    actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'])[0]) for agent in env.agents}  
+    actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'][0])[0]) for agent in env.agents}  
 
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
     #print("actions:",actions)
