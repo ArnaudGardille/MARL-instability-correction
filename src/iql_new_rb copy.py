@@ -115,7 +115,7 @@ def parse_args():
         help="the ending epsilon for exploration")
     parser.add_argument("--exploration-fraction", type=float, default=0.5,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
-    parser.add_argument("--learning-starts", type=int, default=100,
+    parser.add_argument("--learning-starts", type=int, default=1000,
         help="timestep to start learning")
     parser.add_argument("--train-frequency", type=int, default=10,
         help="the frequency of training")
@@ -562,7 +562,6 @@ class QAgent():
         
     def importance_weight(self, sample, completed_episodes):
         num, denom = 1.0, 1.0
-        print('agents:', self.env.agents)
 
         for agent in self.env.possible_agents:
             if agent != self.name:
@@ -573,24 +572,27 @@ class QAgent():
 
                 if self.boltzmann_policy:
                     with torch.no_grad():
-                        q_values = self.q_network(torch.Tensor(normalized_obs).to(device)).cpu()
+                        q_values = self.q_network(torch.Tensor(normalized_obs).to(device))
 
                         tres = torch.nn.Threshold(0.001, 0.001)
-                        probabilities = tres(q_values)*avail_actions
-                        min_q_value = torch.min(q_values + (1.0-avail_actions)*9999.0)
+                        probabilities = tres(q_values)*action_mask
+                        min_q_value = torch.min(q_values + (1.0-action_mask)*9999.0)
                         probabilities -= probabilities.min()
                         probabilities /= probabilities.sum()
-
-                        probability = probabilities[sample['actions']]
+                        actions = sample['actions'][self.name]
+                        #print("actions:", actions.shape)
+                        #print("probabilities:", probabilities.shape)
+                        probability = probabilities.gather(1, sample['actions'][self.name]).squeeze()
+                        #print("probability:", probability.shape)
                     num *= probability
                 else:
                     num *= linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
                      
-                denom *= sample['actions_likelihood'][agent]
+                denom *= sample['actions_likelihood'][agent].squeeze()
 
-        #print("num:", num)
-        #print("denom:", denom)
-        #print("ratio:", num/denom)
+        #print("num:", num.shape)
+        #print("denom:", denom.shape)
+        #print("ratio:", (num/denom).shape)
         return num/denom
                 
                     
