@@ -274,8 +274,8 @@ class QAgent():
         if args.rb == 'prioritized':
             #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
             self.replay_buffer = TensorDictPrioritizedReplayBuffer(
-                alpha = 0.7,
-                beta = 1.1,
+                alpha = 1.0,#0.7,
+                beta = 1.0,#1.1,
                 priority_key="td_error",
                 #storage=ListStorage(self.buffer_size),
                 storage=self.rb_storage,
@@ -289,7 +289,7 @@ class QAgent():
                 #storage=ListStorage(self.buffer_size),
                 storage=self.rb_storage,
                 #collate_fn=lambda x: x, 
-                priority_key="td_error",
+                #priority_key="td_error",
                 batch_size=self.batch_size,
             )
 
@@ -305,11 +305,6 @@ class QAgent():
                     #collate_fn=lambda x: x, 
                     batch_size=self.batch_size,
             )
-
-
-
-        self.rb_storage = LazyMemmapStorage(self.buffer_size)
-        
 
     def act(self, dict_obs, completed_episodes, training=True):
         normalized_obs = self.env.normalize_obs(dict_obs)
@@ -357,7 +352,6 @@ class QAgent():
                         action_mask = sample['observations']['action_mask']
                         normalized_next_obs = sample['next_observations']['observation']
                         next_action_mask = sample['next_observations']['action_mask']
-                        
                         with torch.no_grad():
                             target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
                             td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())

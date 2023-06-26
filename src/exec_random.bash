@@ -1,6 +1,7 @@
 #!/bin/bash
 
-rbs=('uniform' 'prioritized' 'laber')
+#rbs=('uniform' 'prioritized' 'laber')
+rbs=('prioritized')
 
 for rb in "${rbs[@]}"; do
   for ((run=0; run<=10; run+=1)); do
