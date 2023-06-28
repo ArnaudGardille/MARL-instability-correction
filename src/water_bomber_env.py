@@ -226,8 +226,7 @@ class WaterBomberEnv(ParallelEnv):
     duree_min = min([max([norm_1(self.water_bombers[a],f) for f in self.fires]) for a in self.agents])
     return self.T_MAX - duree_min + 2.0
 
-
-if __name__ == "__main__":
+def main_1():
   env = WaterBomberEnv(x_max=3, y_max=3, t_max=20, n_agents=3, add_id=True)
   parallel_api_test(env, num_cycles=1_000_000)
   observations, infos = env.reset(seed=42, deterministic=False, )
@@ -249,3 +248,31 @@ if __name__ == "__main__":
     env.render()
     time.sleep(0.1)
   env.close()
+
+def main_2():
+  envs = [WaterBomberEnv(x_max=3, y_max=3, t_max=20, n_agents=3, add_id=True) for _ in range(10)]
+  #for i in range(10):
+  observations = [envs[i].reset(seed=i, deterministic=False, )[0] for i in range(10)]
+  #env.render()
+  #print("observations initiale:", observations)
+  total_reward = [0.0 for i in range(10)]
+  print([envs[i].agents for i in range(10)])
+  while np.any([envs[i].agents != [] for i in range(10)]):
+    for i in range(10):
+      if envs[i].agents:
+        # this is where you would insert your policy
+        actions = {agent: np.random.choice(np.nonzero(observations[i][agent]['action_mask'])[0]) for agent in envs[i].agents}  
+
+        #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
+        #print("actions:",actions)
+        observations[i], rewards, terminations, truncations, infos = envs[i].step(actions)
+        #print(observations)
+        total_reward += np.mean(list(rewards.values())) 
+        print("rewards:",rewards, "; total reward:", total_reward)
+
+        #env.render()
+        #time.sleep(0.1)
+      #else:
+        #env.close()
+if __name__ == "__main__":
+  main_2()
