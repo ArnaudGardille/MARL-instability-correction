@@ -87,7 +87,7 @@ def parse_args():
     # Environment specific arguments
     parser.add_argument("--x-max", type=int, default=4)
     parser.add_argument("--y-max", type=int, default=4)
-    parser.add_argument("--t-max", type=int, default=20)
+    parser.add_argument("--t-max", type=int, default=10)
     parser.add_argument("--n-agents", type=int, default=2)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--num-envs", type=int, default=1,
@@ -701,11 +701,11 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
             print("next_obs:", next_obs)
             print("rewards:", rewards)
 
-        #if training:
+        if training:
         # On entraine pas, mais on complete quand meme le replay buffer
-        for agent in obs:
-            #q_agents[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
-            q_agents[agent].add_to_rb(obs, actions, probabilities, rewards, next_obs, terminations, truncations, infos, completed_episodes=completed_episodes)
+            for agent in obs:
+                #q_agents[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
+                q_agents[agent].add_to_rb(obs, actions, probabilities, rewards, next_obs, terminations, truncations, infos, completed_episodes=completed_episodes)
 
         #episodic_returns = {k: rewards.get(k, 0) + episodic_returns.get(k, 0) for k in set(rewards) | set(episodic_returns)}
         episodic_return += np.mean(list(rewards.values())) 
