@@ -227,7 +227,7 @@ class WaterBomberEnv(ParallelEnv):
     return self.T_MAX - duree_min + 2.0
 
 def main_1():
-  env = WaterBomberEnv(x_max=3, y_max=3, t_max=20, n_agents=3, add_id=True)
+  env = WaterBomberEnv(x_max=4, y_max=1, t_max=20, n_agents=2, add_id=True)
   parallel_api_test(env, num_cycles=1_000_000)
   observations, infos = env.reset(seed=42, deterministic=False, )
   print('infos:', infos)
@@ -275,4 +275,4 @@ def main_2():
       #else:
         #env.close()
 if __name__ == "__main__":
-  main_2()
+  main_1()

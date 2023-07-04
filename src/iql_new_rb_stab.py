@@ -333,7 +333,8 @@ class QAgent():
 
         #assert obs[-2] == self.agent_id
         assert sum(avail_actions)>0, avail_actions
-        avail_actions_ind = np.nonzero(avail_actions)[0]
+        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+        #print('avail_actions_ind', avail_actions_ind)
         
         epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
 
@@ -341,6 +342,7 @@ class QAgent():
 
         if training and not self.boltzmann_policy and (random.random() < epsilon):
             action = torch.tensor([np.random.choice(avail_actions_ind)])
+            #print(avail_actions_ind, action)
             probability = epsilon/sum(avail_actions)
         else:
             with torch.no_grad():
@@ -367,8 +369,11 @@ class QAgent():
                     probability = 1.0-epsilon if training else 1.0
 
         assert probability > 0.0 , (probability, epsilon)
-        avail_actions_ind = np.nonzero(avail_actions)
-        assert action in avail_actions_ind
+        #assert action in avail_actions_ind
+        if action not in avail_actions_ind:
+            #print(avail_actions_ind)
+            action = torch.tensor([np.random.choice(avail_actions_ind)])
+            probability = epsilon/sum(avail_actions)
 
         if completed_episodes % 1000 == 0:
             writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
@@ -504,8 +509,8 @@ class QAgent():
         for a in obs:
             #print('-'*20)
             #print(a, transition['observations'])
-            assert torch.sum(transition['observations'][a]['action_mask']) > 0 
-            assert torch.sum(transition['next_observations'][a]['action_mask']) > 0 
+            assert torch.sum(transition['observations'][a]['action_mask']) > 0, transition['observations'][a]['action_mask']
+            assert torch.sum(transition['next_observations'][a]['action_mask']) > 0, transition['next_observations'][a]['action_mask']
         self.replay_buffer.add(transition)
 
 
