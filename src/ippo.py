@@ -26,7 +26,7 @@ from collections import Counter
 from stable_baselines3.common.buffers import ReplayBuffer, DictReplayBuffer
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
-from smac.env.pettingzoo import StarCraft2PZEnv
+#from smac.env.pettingzoo import StarCraft2PZEnv
 from torch.utils.tensorboard import SummaryWriter
 
 import stable_baselines3 as sb3
