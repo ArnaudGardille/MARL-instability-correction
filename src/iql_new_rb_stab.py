@@ -812,7 +812,7 @@ def test():
 def main():
 
     ### Creating Env
-    env = WaterBomberEnv(x_max=4, y_max=4, t_max=20, n_agents=2)
+    env = WaterBomberEnv(x_max=args.x_max, y_max=args.y_max, t_max=args.t_max, n_agents=args.n_agents)
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
@@ -870,7 +870,9 @@ def main():
             if args.display_video:
                     nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, visualisation=True)
             
-            for deterministic in [True, False]:
+            determinims = [False] 
+            determinims += [True] if (args.x_max==4 and args.y_max==4 and args.t_max==20 and args.n_agents==2) else []
+            for deterministic in determinims:
                 list_total_reward = []
                 average_duration = 0.0
 
