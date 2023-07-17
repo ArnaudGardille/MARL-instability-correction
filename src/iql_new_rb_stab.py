@@ -10,6 +10,7 @@ scale = 0.25
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqnpy
 import argparse
 import os
+from pathlib import Path
 import random
 import time
 from distutils.util import strtobool
@@ -119,7 +120,7 @@ def parse_args():
     parser.add_argument("--evaluation-episodes", type=int, default=100)
     parser.add_argument("--target-network-frequency", type=int, default=500,
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int, default= 100, #2**18, #256, #
+    parser.add_argument("--batch-size", type=int, default= 1000, #2**18, #256, #
         help="the batch size of sample from the reply memory")
     parser.add_argument("--start-e", type=float, default=1,
         help="the starting epsilon for exploration")
@@ -141,8 +142,9 @@ def parse_args():
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--corrected-loss", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--prio", choices=['td', 'td/past', 'td*cur/past', 'td*cur', 'cur/past', 'cur'], default=None)
+    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--loss-not-corrected-for-prioritized", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
@@ -312,7 +314,7 @@ class QAgent():
                 #priority_key="td_error",
                 batch_size=self.batch_size,
             )
-
+            #print("prio: ", self.prio)
             if args.rb =='laber':
                 self.smaller_buffer_size = self.batch_size*4
 
@@ -404,17 +406,20 @@ class QAgent():
                         current_likelyhood, past_likelyhood = current_likelyhood.to(device) , past_likelyhood.to(device) 
 
                         sample.set("td_error",td_error)
-                        sample.set("td/past",td_error/past_likelyhood)
-                        sample.set("td*cur/past",td_error*current_likelyhood/past_likelyhood)
-                        sample.set("td*cur",td_error*current_likelyhood)
-                        sample.set("cur/past",current_likelyhood/past_likelyhood)
+                        sample.set("td-past",td_error/past_likelyhood)
+                        sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
+                        sample.set("td-cur",td_error*current_likelyhood)
+                        sample.set("cur-past",current_likelyhood/past_likelyhood)
                         sample.set("cur",current_likelyhood)
-
                         self.smaller_buffer.extend(sample)
 
                     sample = self.smaller_buffer.sample()
                 else:
                     sample = self.replay_buffer.sample()
+
+                #if "td" not in sample.keys():
+                #    print(sample.keys())
+                #    sample.set("td", torch.ones(self.batch_size))
                 
                 #if args.rb == 'prioritized':
                 #    print('index', sample["index"])
@@ -441,18 +446,30 @@ class QAgent():
                 #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
                 old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
 
-                if args.rb is not 'uniform':
+                weights = torch.ones(self.batch_size)
+                
+                if (args.rb != 'uniform') and (not self.loss_not_corrected_for_prioritized):
+                    #priorities = self.compute_priorities(td_error)
+                    #weights *= self.compute_prioritized_correction(priorities)
+                    #print('weights:', weights.shape, weights.mean(), weights.max())
+                    #sample['_weight']
+                    #elif args.rb == 'prioritized':
                     weights = sample['_weight']
 
-                if self.corrected_loss:
-                    weight = self.importance_weight(sample, completed_episodes)
+
+                if self.loss_corrected_for_others:
+                    weights *= self.importance_weight(sample, completed_episodes)
                     #print('Shapes:',td_target.shape, old_val.shape, weight.shape)
-                    loss = weighted_mse_loss(td_target, old_val, weight)
-                else:
-                    loss = F.mse_loss(td_target, old_val)
+                loss = weighted_mse_loss(td_target, old_val, weights)
+                #else:
+                #    loss = F.mse_loss(td_target, old_val)
 
                 if args.rb == 'prioritized':
-                    sample.set("td_error",torch.abs(td_target-old_val))
+                    with torch.no_grad():
+                        td_error = torch.abs(td_target-old_val)
+                    sample.set("td_error",td_error)
+                    #sample.set("td",td_error)
+                    #sample['td']
                     self.replay_buffer.update_tensordict_priority(sample)
 
                 writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
@@ -478,6 +495,17 @@ class QAgent():
 
         if self.upload_model:
             self.upload_model()
+
+    def compute_priorities(self, td_errors, eps=1e-8):
+        td_errors = torch.maximum(td_errors, torch.ones(self.batch_size)*eps)
+        return td_errors/td_errors.sum()
+    
+    def compute_prioritized_correction(self, priorities):
+        size_buffer = self.buffer_size
+        if args.rb == 'laber':
+            size_buffer *= 4.0
+        return 1.0/(priorities*size_buffer)
+        
 
     def add_to_rb(self, obs, action, probabilities, reward, next_obs, terminated, truncated=False, infos=None, completed_episodes=0):
         
@@ -512,7 +540,7 @@ class QAgent():
             'rewards':reward,
             'next_observations':normalized_next_obs,
             'dones':dones,
-            #'infos':infos
+            #'td': 1.0#{a:1.0 for a in obs}
         }
         
         #print('transition:', transition)
@@ -544,7 +572,8 @@ class QAgent():
         #save_to_pkl(buffer_path, self.replay_buffer)
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
-        with open(self.name+env_type+add_eps+'_replay_buffer.pickle', 'wb') as handle:
+        path = 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        with open(path, 'wb') as handle:
             pickle.dump(self.replay_buffer[:], handle)
         
         #self.rb_storage[:]
@@ -555,7 +584,8 @@ class QAgent():
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
 
-        with open(self.name+env_type+add_eps+'_replay_buffer.pickle', 'rb') as handle:
+        path = 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        with open(path, 'rb') as handle:
             data = pickle.load(handle)
 
         self.replay_buffer.extend(data)
@@ -573,7 +603,7 @@ class QAgent():
             td_target = sample['rewards'][self.name].flatten() + self.gamma * target_max * (1 - sample['dones'][self.name].flatten())
             old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
 
-        td_error = torch.abs(td_target-old_val)
+            td_error = torch.abs(td_target-old_val)
         return td_error
 
     def visualize_q_values(self, env, completed_episodes):
