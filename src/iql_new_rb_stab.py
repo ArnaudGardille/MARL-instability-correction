@@ -443,8 +443,14 @@ class QAgent():
                 #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
                 old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
 
-                td_error = torch.abs(td_target-old_val)
                 weights = torch.ones(self.batch_size)
+                
+                if args.rb == 'prioritized':
+                    with torch.no_grad():
+                        td_error = torch.abs(td_target-old_val)
+                elif args.rb == 'laber':
+                    td_error = sample['args.prio']
+
 
                 if (args.rb != 'uniform') and (not self.loss_not_corrected_for_prioritized):
                     priorities = self.compute_priorities(td_error)
@@ -589,7 +595,7 @@ class QAgent():
             td_target = sample['rewards'][self.name].flatten() + self.gamma * target_max * (1 - sample['dones'][self.name].flatten())
             old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
 
-        td_error = torch.abs(td_target-old_val)
+            td_error = torch.abs(td_target-old_val)
         return td_error
 
     def visualize_q_values(self, env, completed_episodes):
