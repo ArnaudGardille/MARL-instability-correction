@@ -1,0 +1,11 @@
+if args.rb == 'prioritized':
+    with torch.no_grad():
+        target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
+        #print(sample['rewards'][self.name].shape, target_max.shape,  sample['dones'].shape)
+        td_target = sample['rewards'][self.name].flatten() + self.gamma * target_max * (1 - sample['dones'][self.name].flatten())
+        #print(self.q_network(normalized_obs).shape, action_mask.shape, sample['actions'][self.name].shape)
+        #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
+        old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
+        td_error = torch.abs(td_target-old_val)
+        #"td_error":td_error
+    self.replay_buffer.update_tensordict_priority(sample)

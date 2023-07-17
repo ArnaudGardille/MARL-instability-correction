@@ -144,7 +144,7 @@ def parse_args():
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-prioritized", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--prio", choices=['td', 'td/past', 'td*cur/past', 'td*cur', 'cur/past', 'cur'], default=None)
+    parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
@@ -314,7 +314,7 @@ class QAgent():
                 #priority_key="td_error",
                 batch_size=self.batch_size,
             )
-
+            #print("prio: ", self.prio)
             if args.rb =='laber':
                 self.smaller_buffer_size = self.batch_size*4
 
@@ -406,17 +406,20 @@ class QAgent():
                         current_likelyhood, past_likelyhood = current_likelyhood.to(device) , past_likelyhood.to(device) 
 
                         sample.set("td_error",td_error)
-                        sample.set("td/past",td_error/past_likelyhood)
-                        sample.set("td*cur/past",td_error*current_likelyhood/past_likelyhood)
-                        sample.set("td*cur",td_error*current_likelyhood)
-                        sample.set("cur/past",current_likelyhood/past_likelyhood)
+                        sample.set("td-past",td_error/past_likelyhood)
+                        sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
+                        sample.set("td-cur",td_error*current_likelyhood)
+                        sample.set("cur-past",current_likelyhood/past_likelyhood)
                         sample.set("cur",current_likelyhood)
-
                         self.smaller_buffer.extend(sample)
 
                     sample = self.smaller_buffer.sample()
                 else:
                     sample = self.replay_buffer.sample()
+
+                #if "td" not in sample.keys():
+                #    print(sample.keys())
+                #    sample.set("td", torch.ones(self.batch_size))
                 
                 #if args.rb == 'prioritized':
                 #    print('index', sample["index"])
@@ -445,17 +448,14 @@ class QAgent():
 
                 weights = torch.ones(self.batch_size)
                 
-                if args.rb == 'prioritized':
-                    with torch.no_grad():
-                        td_error = torch.abs(td_target-old_val)
-                elif args.rb == 'laber':
-                    td_error = sample['args.prio']
-
-
                 if (args.rb != 'uniform') and (not self.loss_not_corrected_for_prioritized):
-                    priorities = self.compute_priorities(td_error)
-                    weights *= self.compute_prioritized_correction(priorities)
+                    #priorities = self.compute_priorities(td_error)
+                    #weights *= self.compute_prioritized_correction(priorities)
+                    #print('weights:', weights.shape, weights.mean(), weights.max())
                     #sample['_weight']
+                    #elif args.rb == 'prioritized':
+                    weights = sample['_weight']
+
 
                 if self.loss_corrected_for_others:
                     weights *= self.importance_weight(sample, completed_episodes)
@@ -465,7 +465,11 @@ class QAgent():
                 #    loss = F.mse_loss(td_target, old_val)
 
                 if args.rb == 'prioritized':
+                    with torch.no_grad():
+                        td_error = torch.abs(td_target-old_val)
                     sample.set("td_error",td_error)
+                    #sample.set("td",td_error)
+                    #sample['td']
                     self.replay_buffer.update_tensordict_priority(sample)
 
                 writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
@@ -493,10 +497,14 @@ class QAgent():
             self.upload_model()
 
     def compute_priorities(self, td_errors, eps=1e-8):
-        return torch.maximum(td_errors/td_errors.sum(), torch.ones(self.batch_size)*eps)
+        td_errors = torch.maximum(td_errors, torch.ones(self.batch_size)*eps)
+        return td_errors/td_errors.sum()
     
     def compute_prioritized_correction(self, priorities):
-        return 1.0/priorities
+        size_buffer = self.buffer_size
+        if args.rb == 'laber':
+            size_buffer *= 4.0
+        return 1.0/(priorities*size_buffer)
         
 
     def add_to_rb(self, obs, action, probabilities, reward, next_obs, terminated, truncated=False, infos=None, completed_episodes=0):
@@ -532,7 +540,7 @@ class QAgent():
             'rewards':reward,
             'next_observations':normalized_next_obs,
             'dones':dones,
-            #'infos':infos
+            #'td': 1.0#{a:1.0 for a in obs}
         }
         
         #print('transition:', transition)
