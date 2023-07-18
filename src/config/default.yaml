@@ -1,0 +1,55 @@
+# --- Defaults ---
+
+seed: 1
+torch-deterministic: True
+cuda: True
+track: False
+display-video: False
+capture-video: False
+save-model: True
+upload-model: False
+use-state: False
+save-buffer: False
+load-buffer: False
+save-imgs: False
+
+    
+
+    # Environment specific arguments
+x-max: 4
+y-max: 4
+t-max: 10
+n-agents: 2
+env-normalization: False
+num-envs: 1
+
+    # Algorithm specific arguments
+env-id: "water-bomber-v0"
+load-agents-from: None
+load-buffer-from: None
+random-policy: False
+no-training: False
+total-timesteps: 100000
+learning-rate: 1e-3
+buffer-size: 1000000
+gamma: 0.99
+tau: 1.
+evaluation-frequency: 1000
+evaluation-episodes: 100
+target-network-frequency: 500
+batch-size:  1000 #2**18, #256, #
+start-e: 1
+end-e: 0.05
+exploration-fraction: 0.5
+learning-starts: 1000
+train-frequency: 100
+single-agent: False
+add-id: False
+add-epsilon: False
+dueling: False
+deterministic-env: False
+boltzmann-policy: False
+loss-corrected-for-others: False
+loss-not-corrected-for-prioritized: False
+prio: td_error #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='')
+rb: uniform # choices=['uniform', 'prioritized', 'laber'], default='uniform',

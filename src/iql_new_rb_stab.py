@@ -1,6 +1,7 @@
 from water_bomber_env import WaterBomberEnv
 
 import random
+import yaml
 import numpy as np
 from time import sleep
 from copy import deepcopy
@@ -154,7 +155,7 @@ def parse_args():
     return args
 
 
-args = parse_args()
+
 
 def weighted_mse_loss(input, target, weight):
     return (weight * (input - target) ** 2).mean()
@@ -812,6 +813,95 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
 
     return nb_steps, episodic_return/optimal_reward #episodic_returns
     
+def run_training(params):
+    ### Creating Env
+    env = WaterBomberEnv(x_max=args.x_max, y_max=args.y_max, t_max=args.t_max, n_agents=args.n_agents)
+    # env = dtype_v0(rps_v2.env(), np.float32)
+    #api_test(env, num_cycles=1000, verbose_progress=True)
+
+    env.reset(deterministic=args.deterministic_env)
+
+    agent_0 = env.agents[0]
+    print(env.observation_space(agent_0))
+    obs_shape = env.observation_space(agent_0)['observation'].shape
+    size_obs = np.product(obs_shape)
+    
+    size_act = int(env.action_space(agent_0).n)
+    
+    
+    print('-'*20)
+    print('agents: ',env.agents)
+    print('num_agents: ',env.num_agents)
+    print('observation_space: ',env.observation_space(agent_0))
+    print('action_space: ',env.action_space(agent_0))
+    #print('infos: ',env.infos)    
+    print('size_obs: ',size_obs)    
+    print('size_act: ',size_act)    
+    print('-'*20)
+
+    if args.add_epsilon:
+        size_obs += 1
+    
+    ### Creating Agents
+    
+    q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents} 
+    
+    if args.load_agents_from is not None:
+        for name, agent in q_agents.items():
+            model_path = f"runs/{args.load_agents_from}/saved_models/{name}.cleanrl_model"
+            agent.load(model_path)
+            
+    if args.load_buffer_from is not None:
+        for name, agent in q_agents.items():
+            buffer_path = f"runs/{args.load_buffer_from}/saved_models/{name}_buffer.pkl"
+            agent.load_buffer(buffer_path)
+
+    if args.single_agent:
+        agent_0 = q_agents[env.agents[0]]
+        for agent in q_agents:
+            q_agents[agent].q_network = agent_0.q_network
+            q_agents[agent].replay_buffer = agent_0.replay_buffer
+
+
+    pbar=trange(args.total_timesteps)
+    for completed_episodes in pbar:
+        if not args.no_training:
+            run_episode(env, q_agents, completed_episodes, training=True)
+
+
+        if completed_episodes % args.evaluation_frequency == 0:
+            if args.display_video:
+                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, visualisation=True)
+            
+            determinims = [False] 
+            determinims += [True] if (args.x_max==4 and args.y_max==4 and args.t_max==20 and args.n_agents==2) else []
+            for deterministic in determinims:
+                list_total_reward = []
+                average_duration = 0.0
+
+                for _ in range(args.evaluation_episodes):
+
+                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, deterministic=deterministic)
+                    list_total_reward.append(total_reward)
+                    average_duration += nb_steps
+                
+                average_duration /= args.evaluation_episodes
+                average_return = np.mean(list_total_reward)
+
+                # TRY NOT TO MODIFY: record rewards for plotting purposes
+                decr = "Average return " + ("deterministic" if deterministic else "stochastic")
+                writer.add_scalar(decr, average_return, completed_episodes)
+                #writer.add_scalar("Average duration", average_duration, completed_episodes)
+                if not deterministic:
+                    pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
+                
+
+    if args.save_buffer:
+        for agent in q_agents:
+            q_agents[agent].save_rb()
+
+    env.close()
+
 def test():
     env = simple_spread_v3.env(N=2)
     #simple_v3.env()
@@ -839,9 +929,15 @@ def test():
     #print(env.step(1)) #{agent_0: 1}))
     q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents}
 
+def main(**args):
+    with open(Path('src/config/default.yaml')) as f:
+        params = yaml.safe_load(f)
+    
+    params.update(args)
 
+    run_training(**params)
 
-def main():
+def old_main():
 
     ### Creating Env
     env = WaterBomberEnv(x_max=args.x_max, y_max=args.y_max, t_max=args.t_max, n_agents=args.n_agents)
@@ -936,5 +1032,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(**vars(args))
     #test()
