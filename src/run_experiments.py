@@ -147,8 +147,14 @@ for run in range(NB_RUNS):
 
         print("modified_params: ", modified_params)
 
+experiment_name = ""
+for k in modified_params:
+    if k is not None:
+        experiment_name += str(k)+' '+'-'.join(params[k])+"; "
+print("experiment_name:", experiment_name)
+
 results_df = pd.concat(results_df)
-path = Path.cwd() / 'results' 
+path = Path.cwd() / 'results' / experiment_name
 os.makedirs(path, exist_ok=True)
 print(results_df)
 results_df.to_csv(path/ 'eval_prio.csv', index=False)
@@ -158,4 +164,4 @@ sns.lineplot(x="Step", y="Average optimality",
              data=results_df)
 
 plt.savefig(path/'eval_prio.svg', format='svg')
-plt.show()
+#plt.show()
