@@ -126,8 +126,8 @@ for run in range(NB_RUNS):
                 run_name += "/"+str(k)+':'+str(param_dict[k])
         run_name += '/'+str(run)
         #params['prio'] = prio
-        param_dict['total_timesteps'] = 10
-        param_dict['evaluation_episodes'] = 2
+        #param_dict['total_timesteps'] = 10
+        #param_dict['evaluation_episodes'] = 2
 
         steps, avg_opti = run_training(run_name=run_name, seed=run, verbose=False, **param_dict)
         n = len(avg_opti)
