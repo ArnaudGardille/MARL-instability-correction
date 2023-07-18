@@ -476,6 +476,8 @@ class QAgent():
                 writer.add_scalar(self.name+"/q_values", old_val.mean().item(), completed_episodes)
                 writer.add_scalar(self.name+"/size replay buffer", len(self.replay_buffer), completed_episodes)
 
+                writer.flush()
+
                 # optimize the model
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -572,7 +574,7 @@ class QAgent():
         #save_to_pkl(buffer_path, self.replay_buffer)
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
-        path = 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        path = 'rbs'/ Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
         with open(path, 'wb') as handle:
             pickle.dump(self.replay_buffer[:], handle)
         
