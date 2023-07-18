@@ -871,48 +871,45 @@ def run_training(run_name=None, seed=0, verbose=True, **args):
             q_agents[agent].replay_buffer = agent_0.replay_buffer
 
     #with contextlib.suppress(Exception):
-    try:
-        results = []
-        pbar=trange(params['total_timesteps'])
-        for completed_episodes in pbar:
-            if not params['no_training']:
-                run_episode(env, q_agents, completed_episodes, params, training=True)
+    results = []
+    pbar=trange(params['total_timesteps'])
+    for completed_episodes in pbar:
+        if not params['no_training']:
+            run_episode(env, q_agents, completed_episodes, params, training=True)
 
 
-            if completed_episodes % params['evaluation_frequency'] == 0:
-                if params['display_video']:
-                        nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
+        if completed_episodes % params['evaluation_frequency'] == 0:
+            if params['display_video']:
+                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
+            
+            determinims = [False] 
+            determinims += [True] if (params['x_max']==4 and params['y_max']==4 and params['t_max']==20 and params['n_agents']==2) else []
+            for deterministic in determinims:
+                list_total_reward = []
+                average_duration = 0.0
+
+                for _ in range(params['evaluation_episodes']):
+
+                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, deterministic=deterministic)
+                    list_total_reward.append(total_reward)
+                    average_duration += nb_steps
                 
-                determinims = [False] 
-                determinims += [True] if (params['x_max']==4 and params['y_max']==4 and params['t_max']==20 and params['n_agents']==2) else []
-                for deterministic in determinims:
-                    list_total_reward = []
-                    average_duration = 0.0
+                average_duration /= params['evaluation_episodes']
+                average_return = np.mean(list_total_reward)
 
-                    for _ in range(params['evaluation_episodes']):
+                # TRY NOT TO MODIFY: record rewards for plotting purposes
+                decr = "Average return " + ("deterministic" if deterministic else "stochastic")
+                writer.add_scalar(decr, average_return, completed_episodes)
+                #writer.add_scalar("Average duration", average_duration, completed_episodes)
+                if not deterministic:
+                    pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
+                    results.append(average_return)
+                
 
-                        nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, deterministic=deterministic)
-                        list_total_reward.append(total_reward)
-                        average_duration += nb_steps
-                    
-                    average_duration /= params['evaluation_episodes']
-                    average_return = np.mean(list_total_reward)
+    if params['save_buffer']:
+        for agent in q_agents:
+            q_agents[agent].save_rb()
 
-                    # TRY NOT TO MODIFY: record rewards for plotting purposes
-                    decr = "Average return " + ("deterministic" if deterministic else "stochastic")
-                    writer.add_scalar(decr, average_return, completed_episodes)
-                    #writer.add_scalar("Average duration", average_duration, completed_episodes)
-                    if not deterministic:
-                        pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
-                        results.append(average_return)
-                    
-
-        if params['save_buffer']:
-            for agent in q_agents:
-                q_agents[agent].save_rb()
-
-    except:
-        sys.exit(1)
 
     env.close()
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]

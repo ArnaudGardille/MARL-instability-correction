@@ -9,8 +9,8 @@ sns.set_theme(style="darkgrid")
 from distutils.util import strtobool
 import argparse 
 
-import warnings
-warnings.filterwarnings("ignore")
+#import warnings
+#warnings.filterwarnings("ignore")
 
 def parse_args():
     # fmt: off
@@ -106,7 +106,7 @@ test_params = {
     'evaluation_episodes':100,
 }
 
-NB_RUNS = 3
+NB_RUNS = 2
 
 modified_params = [None, None]
 
@@ -122,11 +122,12 @@ for run in range(NB_RUNS):
         run_name= "eval_prio" 
 
         for k in modified_params:
-            run_name += "/{k}:{param_dict['k']}"
-        run_name += '/{run}'
+            if k is not None:
+                run_name += "/"+str(k)+':'+str(param_dict[k])
+        run_name += '/'+str(run)
         #params['prio'] = prio
-        param_dict['total_timesteps'] = 1
-        param_dict['evaluation_episodes'] = 1
+        param_dict['total_timesteps'] = 10
+        param_dict['evaluation_episodes'] = 2
 
         steps, avg_opti = run_training(run_name=run_name, seed=run, verbose=False, **param_dict)
         n = len(avg_opti)

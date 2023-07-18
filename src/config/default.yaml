@@ -2,7 +2,7 @@
 
 seed: 1
 torch_deterministic: True
-cuda: True
+cuda: False
 track: False
 display_video: False
 capture_video: False
@@ -31,7 +31,7 @@ random_policy: False
 no_training: False
 total_timesteps: 100000
 learning_rate: 0.001
-buffer_size: 1000000
+buffer_size: 100000
 gamma: 0.99
 tau: 1.
 evaluation_frequency: 1000
