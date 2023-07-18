@@ -14,6 +14,7 @@ dist/
 .DS_Store
 runs/
 archives/
+results/
 downloads/
 eggs/
 .eggs/

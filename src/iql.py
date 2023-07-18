@@ -6,6 +6,7 @@ import numpy as np
 from time import sleep
 from copy import deepcopy
 import pickle
+import sys
 scale = 0.25   
 
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqnpy
@@ -34,6 +35,8 @@ from collections import Counter
 #from smac.env.pettingzoo import StarCraft2PZEnv
 from torch.utils.tensorboard import SummaryWriter
 
+import contextlib
+
 #import stable_baselines3 as sb3
 
 from pettingzoo.test import api_test
@@ -41,7 +44,6 @@ from pettingzoo.test import api_test
 #from pettingzoo.mpe import simple_v3, simple_spread_v3
 #from supersuit import dtype_v0
 
-#import pandas as pd 
 
 import matplotlib.pyplot as plt
 
@@ -160,47 +162,6 @@ def parse_args():
 def weighted_mse_loss(input, target, weight):
     return (weight * (input - target) ** 2).mean()
 
-device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-print('Device: ', device)
-
-def load_experiment(run_name, load_buffer=False):
-    q_agents = None
-    return q_agents
-
-if args.run_name is not None:
-    run_name = args.run_name
-else:
-    run_name = f"iql_{int(time.time())}"
-
-if args.save_model:
-    os.makedirs(f"runs/{run_name}/saved_models", exist_ok=True)
-
-if args.track:
-    import wandb
-
-    wandb.init(
-        project=args.wandb_project_name,
-        entity=args.wandb_entity,
-        sync_tensorboard=True,
-        config=vars(args),
-        name=run_name,
-        monitor_gym=True,
-        save_code=True,
-    )
-writer = SummaryWriter(f"runs/{run_name}")
-writer.add_text(
-    "hyperparameters",
-    "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-)
-#writer.add_hparams(vars(args), {})
-writer.flush()
-
-# TRY NOT TO MODIFY: seeding
-random.seed(args.seed)
-np.random.seed(args.seed)
-torch.manual_seed(args.seed)
-torch.backends.cudnn.deterministic = args.torch_deterministic
-
 # ALGO LOGIC: initialize agent here:
 class QNetwork(nn.Module): #QNetworkSimpleMLP
     def __init__(self, obs_shape, act_shape):
@@ -258,9 +219,15 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     
 
 class QAgent():
-    def __init__(self, env, name, args, obs_shape, act_shape):
-        for k, v in vars(args).items():
+    def __init__(self, env, name, params, obs_shape, act_shape, writer):
+        for k, v in params.items():
             setattr(self, k, v)
+
+        self.params = params
+        self.writer = writer
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() and params['cuda'] else "cpu")
+        
 
         self.env = env
 
@@ -274,13 +241,13 @@ class QAgent():
             network_class=QNetwork
 
 
-        self.q_network = network_class(obs_shape, act_shape).to(device)
+        self.q_network = network_class(obs_shape, act_shape).to(self.device)
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
-        self.target_network = network_class(obs_shape, act_shape).to(device)
+        self.target_network = network_class(obs_shape, act_shape).to(self.device)
         self.target_network.load_state_dict(self.q_network.state_dict())
 
         #observation_space = env.observation_space(agent_id)
-        #print(self.buffer_size,env.observation_space(self.name),env.action_space(self.name),device)
+        #print(self.buffer_size,env.observation_space(self.name),env.action_space(self.name),self.device)
         """observation_space = Dict({
             'observation': env.observation_space(self.name),
             'action_mask': env.observation_space(self.name)['action_mask']
@@ -290,11 +257,11 @@ class QAgent():
             self.buffer_size,
             env.observation_space(self.name), #env.observation_space(self.name)
             env.action_space(self.name),
-            device,handle_timeout_termination=False,
+            self.device,handle_timeout_termination=False,
             )"""
         self.rb_storage = LazyTensorStorage(self.buffer_size)
         
-        if args.rb == 'prioritized':
+        if self.params['rb'] == 'prioritized':
             #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
             self.replay_buffer = TensorDictPrioritizedReplayBuffer(
                 alpha = 1.0,#0.7,
@@ -316,7 +283,7 @@ class QAgent():
                 batch_size=self.batch_size,
             )
             #print("prio: ", self.prio)
-            if args.rb =='laber':
+            if self.params['rb'] =='laber':
                 self.smaller_buffer_size = self.batch_size*4
 
                 self.smaller_buffer = TensorDictPrioritizedReplayBuffer(
@@ -329,7 +296,7 @@ class QAgent():
                     batch_size=self.batch_size,
             )
         
-        if args.load_buffer:
+        if self.params['load_buffer']:
             self.load_rb()
 
 
@@ -350,7 +317,7 @@ class QAgent():
 
         
 
-        if args.random_policy or (training and not self.boltzmann_policy and (random.random() < epsilon)):
+        if self.params['random_policy'] or (training and not self.boltzmann_policy and (random.random() < epsilon)):
         #if True:
             action = torch.tensor([np.random.choice(avail_actions_ind)])
             #print(avail_actions_ind, action)
@@ -358,9 +325,9 @@ class QAgent():
         else:
             with torch.no_grad():
                 obs = torch.Tensor(obs)
-                if args.add_epsilon:
+                if self.params['add_epsilon']:
                     obs = torch.cat((obs, torch.tensor([epsilon])), 0)
-                q_values = self.q_network(obs.to(device)).cpu()
+                q_values = self.q_network(obs.to(self.device)).cpu()
 
                 if self.boltzmann_policy:
                     tres = torch.nn.Threshold(0.001, 0.001)
@@ -387,8 +354,8 @@ class QAgent():
             probability = epsilon/sum(avail_actions)
 
         if completed_episodes % 1000 == 0:
-            writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
-            writer.add_scalar(self.name+"/action", action, completed_episodes)
+            self.writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
+            self.writer.add_scalar(self.name+"/action", action, completed_episodes)
 
         return action, probability
 
@@ -397,14 +364,14 @@ class QAgent():
         if completed_episodes > self.learning_starts:
             #print("mod: ", (completed_episodes + 100*self.agent_id ) % self.train_frequency)
             if completed_episodes % self.train_frequency == 0:
-                if args.rb =='laber':
+                if self.params['rb'] =='laber':
                     # On met a jour les TD errors 
                     for _ in range(4): #(self.smaller_buffer_size // self.buffer_size)+1):
-                        sample = self.replay_buffer.sample().to(device)
+                        sample = self.replay_buffer.sample().to(self.device)
                         
                         td_error = self.get_td_error(sample)
                         current_likelyhood, past_likelyhood = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
-                        current_likelyhood, past_likelyhood = current_likelyhood.to(device) , past_likelyhood.to(device) 
+                        current_likelyhood, past_likelyhood = current_likelyhood.to(self.device) , past_likelyhood.to(self.device) 
 
                         sample.set("td_error",td_error)
                         sample.set("td-past",td_error/past_likelyhood)
@@ -422,18 +389,18 @@ class QAgent():
                 #    print(sample.keys())
                 #    sample.set("td", torch.ones(self.batch_size))
                 
-                #if args.rb == 'prioritized':
+                #if self.params['']rb == 'prioritized':
                 #    print('index', sample["index"])
                 #print('sample:', sample)
 
-                sample = sample.to(device)
+                sample = sample.to(self.device)
                 #action_mask = data.next_observations['action_mask']
                 normalized_obs = sample['observations'][self.name]['observation']
-                #normalized_obs = self.env.normalize_obs(observations).to(device)
+                #normalized_obs = self.env.normalize_obs(observations).to(self.device)
                 action_mask = sample['observations'][self.name]['action_mask']
                 
                 normalized_next_obs = sample['next_observations'][self.name]['observation']
-                #normalized_next_obs = self.env.normalize_obs(next_observations).to(device)
+                #normalized_next_obs = self.env.normalize_obs(next_observations).to(self.device)
                 next_action_mask = sample['next_observations'][self.name]['action_mask']
                 #assert next_observations[0][-2] == self.agent_id
                 assert torch.all(torch.sum(action_mask, 1) >0), (normalized_obs,action_mask)
@@ -449,12 +416,12 @@ class QAgent():
 
                 weights = torch.ones(self.batch_size)
                 
-                if (args.rb != 'uniform') and (not self.loss_not_corrected_for_prioritized):
+                if (self.params['rb'] != 'uniform') and self.loss_corrected_for_priorisation:
                     #priorities = self.compute_priorities(td_error)
                     #weights *= self.compute_prioritized_correction(priorities)
                     #print('weights:', weights.shape, weights.mean(), weights.max())
                     #sample['_weight']
-                    #elif args.rb == 'prioritized':
+                    #elif self.params['']rb == 'prioritized':
                     weights = sample['_weight']
 
 
@@ -465,7 +432,7 @@ class QAgent():
                 #else:
                 #    loss = F.mse_loss(td_target, old_val)
 
-                if args.rb == 'prioritized':
+                if self.params['rb'] == 'prioritized':
                     with torch.no_grad():
                         td_error = torch.abs(td_target-old_val)
                     sample.set("td_error",td_error)
@@ -473,11 +440,11 @@ class QAgent():
                     #sample['td']
                     self.replay_buffer.update_tensordict_priority(sample)
 
-                writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
-                writer.add_scalar(self.name+"/q_values", old_val.mean().item(), completed_episodes)
-                writer.add_scalar(self.name+"/size replay buffer", len(self.replay_buffer), completed_episodes)
+                self.writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
+                self.writer.add_scalar(self.name+"/q_values", old_val.mean().item(), completed_episodes)
+                self.writer.add_scalar(self.name+"/size replay buffer", len(self.replay_buffer), completed_episodes)
 
-                writer.flush()
+                self.writer.flush()
 
                 # optimize the model
                 self.optimizer.zero_grad()
@@ -505,7 +472,7 @@ class QAgent():
     
     def compute_prioritized_correction(self, priorities):
         size_buffer = self.buffer_size
-        if args.rb == 'laber':
+        if self.params['rb'] == 'laber':
             size_buffer *= 4.0
         return 1.0/(priorities*size_buffer)
         
@@ -516,7 +483,7 @@ class QAgent():
         next_obs = deepcopy(next_obs)
         normalized_obs, normalized_next_obs, dones = {}, {}, {}
         for a in obs:
-            if args.env_normalization:
+            if self.params['env_normalization']:
                 normalized_obs[a] = self.env.normalize_obs(obs[a])
                 normalized_next_obs[a] = self.env.normalize_obs(next_obs[a])
             else:
@@ -524,7 +491,7 @@ class QAgent():
                 normalized_next_obs[a] = next_obs[a]
             dones[a] = torch.tensor(terminated[a] or truncated[a], dtype=torch.float)
 
-        if args.add_epsilon:
+        if self.params['add_epsilon']:
             for a in obs:
                 epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
                 normalized_obs[a]['observation'] = torch.cat((normalized_obs[a]['observation'], torch.tensor([epsilon])), 0)
@@ -558,7 +525,7 @@ class QAgent():
 
     def save(self):
 
-        model_path = f"runs/{run_name}/saved_models/{self.name}.cleanrl_model"
+        model_path = f"runs/{self.run_name}/saved_models/{self.name}.cleanrl_model"
         torch.save(self.q_network.state_dict(), model_path)
         #print(f"model saved to {model_path}")
 
@@ -594,7 +561,7 @@ class QAgent():
         self.replay_buffer.extend(data)
 
     def get_td_error(self, sample):
-        sample = sample.to(device)
+        sample = sample.to(self.device)
         normalized_obs = sample['observations'][self.name]['observation']
         action_mask = sample['observations'][self.name]['action_mask']
         normalized_next_obs = sample['next_observations'][self.name]['observation']
@@ -631,7 +598,7 @@ class QAgent():
                 action_mask= env.get_action_mask(x,y)
                 normalized_obs = self.env.normalize_obs(observation)
                 #print('normalized_obs:', normalized_obs)
-                normalized_obs = TensorDict(normalized_obs, batch_size=[]).to(device)
+                normalized_obs = TensorDict(normalized_obs, batch_size=[]).to(self.device)
                 #print(self.q_network(observation).detach().cpu()*action_mask)
                 pred = self.q_network(normalized_obs['observation']).detach().cpu()
                 target = pred + (action_mask-1)*9999.0
@@ -658,7 +625,7 @@ class QAgent():
         fig.colorbar(im, ax=ax, label='Interactive colorbar')
 
 
-        #writer.add_image(self.name+"/q_values_imgs", q_values, completed_episodes)
+        #self.writer.add_image(self.name+"/q_values_imgs", q_values, completed_episodes)
 
 
         #fig, ax = plt.subplots(figsize=(6, 6))
@@ -667,7 +634,7 @@ class QAgent():
                 if choosen_act[x,y] != 4:
                     plt.arrow(x, 4-y, scale*arrows[choosen_act[x,y]][0], scale*arrows[choosen_act[x,y]][1], head_width=0.1)
 
-        writer.add_figure(self.name+"/q*_values_imgs", fig, completed_episodes)
+        self.writer.add_figure(self.name+"/q*_values_imgs", fig, completed_episodes)
 
         if self.dueling:
             fig, ax = plt.subplots()
@@ -675,25 +642,25 @@ class QAgent():
 
             fig.colorbar(im, ax=ax, label='Interactive colorbar')
 
-            writer.add_figure(self.name+"/v_values_imgs", fig, completed_episodes)
+            self.writer.add_figure(self.name+"/v_values_imgs", fig, completed_episodes)
         
     def importance_weight(self, sample, completed_episodes):
         num, denom = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
-        return (num/denom).to(device)
+        return (num/denom).to(self.device)
     
     def current_and_past_others_actions_likelyhood(self, sample, completed_episodes):
         current_likelyhood, past_likelyhood = torch.ones(self.batch_size), torch.ones(self.batch_size)
 
         for agent in self.env.possible_agents:
             if agent != self.name:
-                sample = sample.cpu() #.to(device)
+                sample = sample.cpu() #.to(self.device)
                 normalized_obs = sample['observations'][agent]['observation']
                 action_mask = sample['observations'][agent]['action_mask']
                 actions = sample['actions'][agent]
 
                 with torch.no_grad():
                         
-                    q_values = self.q_network(torch.Tensor(normalized_obs).to(device)).cpu()
+                    q_values = self.q_network(torch.Tensor(normalized_obs).to(self.device)).cpu()
 
                     if self.boltzmann_policy:
                         
@@ -742,8 +709,8 @@ class QAgent():
  
 
 
-def run_episode(env, q_agents, completed_episodes, training=False, visualisation=False, verbose=False, deterministic=args.deterministic_env):
-    if visualisation and args.save_imgs:
+def run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=False, verbose=False, deterministic=False):
+    if visualisation and params['save_imgs']:
         obs, _ = env.reset(deterministic=deterministic) 
 
         for agent in env.agents:
@@ -764,7 +731,7 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
             env.render()
             time.sleep(0.1)
         
-        #if args.use_state:
+        #if params['']use_state:
         #    for a in env.agents:
         #        obs[a]['observation'] = env.state()
 
@@ -804,7 +771,7 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
         obs = next_obs
 
     if training:
-        if args.single_agent:
+        if params['single_agent']:
             agent_0 = list(q_agents.values())[0]
             agent_0.train(completed_episodes)
         else:
@@ -813,225 +780,157 @@ def run_episode(env, q_agents, completed_episodes, training=False, visualisation
 
     return nb_steps, episodic_return/optimal_reward #episodic_returns
     
-def run_training(params):
-    ### Creating Env
-    env = WaterBomberEnv(x_max=args.x_max, y_max=args.y_max, t_max=args.t_max, n_agents=args.n_agents)
-    # env = dtype_v0(rps_v2.env(), np.float32)
-    #api_test(env, num_cycles=1000, verbose_progress=True)
+def run_training(run_name=None, seed=0, verbose=True, **args):
 
-    env.reset(deterministic=args.deterministic_env)
-
-    agent_0 = env.agents[0]
-    print(env.observation_space(agent_0))
-    obs_shape = env.observation_space(agent_0)['observation'].shape
-    size_obs = np.product(obs_shape)
-    
-    size_act = int(env.action_space(agent_0).n)
-    
-    
-    print('-'*20)
-    print('agents: ',env.agents)
-    print('num_agents: ',env.num_agents)
-    print('observation_space: ',env.observation_space(agent_0))
-    print('action_space: ',env.action_space(agent_0))
-    #print('infos: ',env.infos)    
-    print('size_obs: ',size_obs)    
-    print('size_act: ',size_act)    
-    print('-'*20)
-
-    if args.add_epsilon:
-        size_obs += 1
-    
-    ### Creating Agents
-    
-    q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents} 
-    
-    if args.load_agents_from is not None:
-        for name, agent in q_agents.items():
-            model_path = f"runs/{args.load_agents_from}/saved_models/{name}.cleanrl_model"
-            agent.load(model_path)
-            
-    if args.load_buffer_from is not None:
-        for name, agent in q_agents.items():
-            buffer_path = f"runs/{args.load_buffer_from}/saved_models/{name}_buffer.pkl"
-            agent.load_buffer(buffer_path)
-
-    if args.single_agent:
-        agent_0 = q_agents[env.agents[0]]
-        for agent in q_agents:
-            q_agents[agent].q_network = agent_0.q_network
-            q_agents[agent].replay_buffer = agent_0.replay_buffer
-
-
-    pbar=trange(args.total_timesteps)
-    for completed_episodes in pbar:
-        if not args.no_training:
-            run_episode(env, q_agents, completed_episodes, training=True)
-
-
-        if completed_episodes % args.evaluation_frequency == 0:
-            if args.display_video:
-                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, visualisation=True)
-            
-            determinims = [False] 
-            determinims += [True] if (args.x_max==4 and args.y_max==4 and args.t_max==20 and args.n_agents==2) else []
-            for deterministic in determinims:
-                list_total_reward = []
-                average_duration = 0.0
-
-                for _ in range(args.evaluation_episodes):
-
-                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, deterministic=deterministic)
-                    list_total_reward.append(total_reward)
-                    average_duration += nb_steps
-                
-                average_duration /= args.evaluation_episodes
-                average_return = np.mean(list_total_reward)
-
-                # TRY NOT TO MODIFY: record rewards for plotting purposes
-                decr = "Average return " + ("deterministic" if deterministic else "stochastic")
-                writer.add_scalar(decr, average_return, completed_episodes)
-                #writer.add_scalar("Average duration", average_duration, completed_episodes)
-                if not deterministic:
-                    pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
-                
-
-    if args.save_buffer:
-        for agent in q_agents:
-            q_agents[agent].save_rb()
-
-    env.close()
-
-def test():
-    env = simple_spread_v3.env(N=2)
-    #simple_v3.env()
-    env.reset(deterministic=args.deterministic_env)
-
-    agent_0 = env.agents[0]
-
-    print(env.observation_space(agent_0))
-    obs_shape = env.observation_space(agent_0).shape
-    size_obs = np.product(obs_shape)
-    size_act = int(env.action_space(agent_0).n)
-
-    print('-'*20)
-    print('agents: ',env.agents)
-    print('num_agents: ',env.num_agents)
-    print('observation_space: ', env.observation_space(agent_0))
-    print('action_space: ',env.action_space(agent_0))
-    #print('infos: ',env.infos)    
-    print('size_obs: ',size_obs)    
-    print('size_act: ',size_act)    
-    print('-'*20)
-
-    print(env.action_space(agent_0).sample())
-    print(agent_0)
-    #print(env.step(1)) #{agent_0: 1}))
-    q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents}
-
-def main(**args):
     with open(Path('src/config/default.yaml')) as f:
         params = yaml.safe_load(f)
     
     params.update(args)
 
-    run_training(**params)
 
-def old_main():
+    if run_name is None:
+        run_name = f"iql_{int(time.time())}"
+
+    writer = SummaryWriter(f"runs/{run_name}")
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
+    )
+    #writer.add_hparams(vars(args), {})
+    writer.flush()
+
+    if params['save_model']:
+        os.makedirs(f"runs/{run_name}/saved_models", exist_ok=True)
+
+    if params['track']:
+        import wandb
+
+        wandb.init(
+            project=params['wandb_project_name'],
+            entity=params['wandb_entity'],
+            sync_tensorboard=True,
+            config=vars(args),
+            name=run_name,
+            monitor_gym=True,
+            save_code=True,
+        )
+    
+
+    # TRY NOT TO MODIFY: seeding
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = params['torch_deterministic']
 
     ### Creating Env
-    env = WaterBomberEnv(x_max=args.x_max, y_max=args.y_max, t_max=args.t_max, n_agents=args.n_agents)
+    env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
-    env.reset(deterministic=args.deterministic_env)
+    env.reset(deterministic=params['deterministic_env'])
 
     agent_0 = env.agents[0]
-    print(env.observation_space(agent_0))
+
     obs_shape = env.observation_space(agent_0)['observation'].shape
     size_obs = np.product(obs_shape)
     
     size_act = int(env.action_space(agent_0).n)
     
-    
-    print('-'*20)
-    print('agents: ',env.agents)
-    print('num_agents: ',env.num_agents)
-    print('observation_space: ',env.observation_space(agent_0))
-    print('action_space: ',env.action_space(agent_0))
-    #print('infos: ',env.infos)    
-    print('size_obs: ',size_obs)    
-    print('size_act: ',size_act)    
-    print('-'*20)
+    if verbose:
+        print('-'*20)
+        print('agents: ',env.agents)
+        print('num_agents: ',env.num_agents)
+        print('observation_space: ',env.observation_space(agent_0))
+        print('action_space: ',env.action_space(agent_0))
+        #print('infos: ',env.infos)    
+        print('size_obs: ',size_obs)    
+        print('size_act: ',size_act)    
+        print('-'*20)
 
-    if args.add_epsilon:
+    if params['add_epsilon']:
         size_obs += 1
     
     ### Creating Agents
     
-    q_agents = {a:QAgent(env, a, args, size_obs, size_act)  for a in env.agents} 
+    q_agents = {a:QAgent(env, a, params, size_obs, size_act, writer)  for a in env.agents} 
     
-    if args.load_agents_from is not None:
+    if params['load_agents_from'] is not None:
         for name, agent in q_agents.items():
-            model_path = f"runs/{args.load_agents_from}/saved_models/{name}.cleanrl_model"
+            model_path = f"runs/{params['load_agents_from']}/saved_models/{name}.cleanrl_model"
             agent.load(model_path)
             
-    if args.load_buffer_from is not None:
+    if params['load_buffer_from'] is not None:
         for name, agent in q_agents.items():
-            buffer_path = f"runs/{args.load_buffer_from}/saved_models/{name}_buffer.pkl"
+            buffer_path = f"runs/{params['load_buffer_from']}/saved_models/{name}_buffer.pkl"
             agent.load_buffer(buffer_path)
 
-    if args.single_agent:
+    if params['single_agent']:
         agent_0 = q_agents[env.agents[0]]
         for agent in q_agents:
             q_agents[agent].q_network = agent_0.q_network
             q_agents[agent].replay_buffer = agent_0.replay_buffer
 
+    #with contextlib.suppress(Exception):
+    try:
+        results = []
+        pbar=trange(params['total_timesteps'])
+        for completed_episodes in pbar:
+            if not params['no_training']:
+                run_episode(env, q_agents, completed_episodes, params, training=True)
 
-    pbar=trange(args.total_timesteps)
-    for completed_episodes in pbar:
-        if not args.no_training:
-            run_episode(env, q_agents, completed_episodes, training=True)
 
-
-        if completed_episodes % args.evaluation_frequency == 0:
-            if args.display_video:
-                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, visualisation=True)
-            
-            determinims = [False] 
-            determinims += [True] if (args.x_max==4 and args.y_max==4 and args.t_max==20 and args.n_agents==2) else []
-            for deterministic in determinims:
-                list_total_reward = []
-                average_duration = 0.0
-
-                for _ in range(args.evaluation_episodes):
-
-                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, training=False, deterministic=deterministic)
-                    list_total_reward.append(total_reward)
-                    average_duration += nb_steps
+            if completed_episodes % params['evaluation_frequency'] == 0:
+                if params['display_video']:
+                        nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
                 
-                average_duration /= args.evaluation_episodes
-                average_return = np.mean(list_total_reward)
+                determinims = [False] 
+                determinims += [True] if (params['x_max']==4 and params['y_max']==4 and params['t_max']==20 and params['n_agents']==2) else []
+                for deterministic in determinims:
+                    list_total_reward = []
+                    average_duration = 0.0
 
-                # TRY NOT TO MODIFY: record rewards for plotting purposes
-                decr = "Average return " + ("deterministic" if deterministic else "stochastic")
-                writer.add_scalar(decr, average_return, completed_episodes)
-                #writer.add_scalar("Average duration", average_duration, completed_episodes)
-                if not deterministic:
-                    pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
-                
+                    for _ in range(params['evaluation_episodes']):
 
-    if args.save_buffer:
-        for agent in q_agents:
-            q_agents[agent].save_rb()
+                        nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, deterministic=deterministic)
+                        list_total_reward.append(total_reward)
+                        average_duration += nb_steps
+                    
+                    average_duration /= params['evaluation_episodes']
+                    average_return = np.mean(list_total_reward)
+
+                    # TRY NOT TO MODIFY: record rewards for plotting purposes
+                    decr = "Average return " + ("deterministic" if deterministic else "stochastic")
+                    writer.add_scalar(decr, average_return, completed_episodes)
+                    #writer.add_scalar("Average duration", average_duration, completed_episodes)
+                    if not deterministic:
+                        pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
+                        results.append(average_return)
+                    
+
+        if params['save_buffer']:
+            for agent in q_agents:
+                q_agents[agent].save_rb()
+
+    except:
+        sys.exit(1)
 
     env.close()
+    steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]
+    return steps, results
 
+
+
+def main(**params):
+
+    steps, results = run_training(run_name='test', seed=0, **params)
+    print("results:", results)
     #print("Average total reward", total_reward / args.total_timesteps)
 
 
-
 if __name__ == "__main__":
-    args = parse_args()
-    main(**vars(args))
-    #test()
+    #args = parse_args()
+    #main(**vars(args))
+    params = {
+        'total_timesteps': 1010
+    }
+    main(**params)
