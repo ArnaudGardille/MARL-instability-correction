@@ -124,7 +124,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 3
+NB_RUNS = 10
 
 modified_params = [None, None]
 
@@ -137,10 +137,16 @@ for k, v in params_list_choice.items():
 
 #print("modified_params:", modified_params)
 
-experiment_name = '{date:%Y-%m-%d_%H:%M:%S}.txt'.format( date=datetime.datetime.now() )
-#datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
-
+#experiment_name = '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() )
+experiment_name= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
+for k in params_const:
+    experiment_name += '-' + str(k)
+for k in params_list_choice:
+    experiment_name += '-' + str(k)
 print("experiment_name:", experiment_name)
+
+path = Path.cwd() / 'results' / experiment_name
+os.makedirs(path, exist_ok=True)
 
 results_df = []
 for run in range(NB_RUNS):
@@ -179,9 +185,13 @@ for run in range(NB_RUNS):
 
 
 
+with open(path/'params_const.yaml', 'w') as f:
+    yaml.dump(params_const, f, default_flow_style=False)
+
+with open(path/'params_list_choice.yaml', 'w') as f:
+    yaml.dump(params_list_choice, f, default_flow_style=False)
+
 results_df = pd.concat(results_df)
-path = Path.cwd() / 'results' / experiment_name
-os.makedirs(path, exist_ok=True)
 #print(results_df)
 results_df.to_csv(path/ 'eval_prio.csv', index=False)
 
