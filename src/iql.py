@@ -146,7 +146,7 @@ def parse_args():
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--loss-not-corrected-for-prioritized", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
@@ -416,7 +416,7 @@ class QAgent():
 
                 weights = torch.ones(self.batch_size)
                 
-                if (self.params['rb'] != 'uniform') and self.loss_corrected_for_priorisation:
+                if (self.params['rb'] != 'uniform') and self.loss_not_corrected_for_priorisation:
                     #priorities = self.compute_priorities(td_error)
                     #weights *= self.compute_prioritized_correction(priorities)
                     #print('weights:', weights.shape, weights.mean(), weights.max())
@@ -525,11 +525,12 @@ class QAgent():
 
     def save(self):
 
-        model_path = f"runs/{self.run_name}/saved_models/{self.name}.cleanrl_model"
+        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.name}.cleanrl_model")
         torch.save(self.q_network.state_dict(), model_path)
         #print(f"model saved to {model_path}")
 
     def load(self, model_path):
+        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.name}.cleanrl_model")
         self.q_network.load_state_dict(torch.load(model_path))
         print(f"model sucessfullt loaded from to {model_path}")
         
@@ -538,11 +539,11 @@ class QAgent():
         return ""
     
     def save_rb(self):
-        #buffer_path = f"runs/{run_name}/saved_models/{self.name}_buffer.pkl"
+        #buffer_path = f"runs/{params['run_name']}/saved_models/{self.name}_buffer.pkl"
         #save_to_pkl(buffer_path, self.replay_buffer)
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
-        path = 'rbs'/ Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
         with open(path, 'wb') as handle:
             pickle.dump(self.replay_buffer[:], handle)
         
@@ -554,7 +555,7 @@ class QAgent():
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
 
-        path = 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
         with open(path, 'rb') as handle:
             data = pickle.load(handle)
 
@@ -780,18 +781,18 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
     return nb_steps, episodic_return/optimal_reward #episodic_returns
     
-def run_training(run_name=None, seed=0, verbose=True, **args):
+def run_training(seed=0, verbose=True, **args):
 
     with open(Path('src/config/default.yaml')) as f:
         params = yaml.safe_load(f)
     
     params.update(args)
 
+    if params['run_name'] is None:
+        params['run_name'] = f"iql_{int(time.time())}"
+    
 
-    if run_name is None:
-        run_name = f"iql_{int(time.time())}"
-
-    writer = SummaryWriter(f"runs/{run_name}")
+    writer = SummaryWriter(f"runs/{params['run_name']}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
@@ -800,7 +801,7 @@ def run_training(run_name=None, seed=0, verbose=True, **args):
     writer.flush()
 
     if params['save_model']:
-        os.makedirs(f"runs/{run_name}/saved_models", exist_ok=True)
+        os.makedirs(f"runs/{params['run_name']}/saved_models", exist_ok=True)
 
     if params['track']:
         import wandb
@@ -810,7 +811,7 @@ def run_training(run_name=None, seed=0, verbose=True, **args):
             entity=params['wandb_entity'],
             sync_tensorboard=True,
             config=vars(args),
-            name=run_name,
+            name=params['run_name'],
             monitor_gym=True,
             save_code=True,
         )
