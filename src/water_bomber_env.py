@@ -193,7 +193,6 @@ class WaterBomberEnv(ParallelEnv):
   def normalize_obs(self, obs):
     # ASSUMES ALL AGENTS HAVE SAME OBS SPACE
     normalized_obs = copy(obs)
-    normalized_obs['observation']
 
     agent = self.possible_agents[0]
     normalized_obs['observation'] = 2*normalized_obs['observation'].cpu()/(self.observation_space(agent)['observation'].nvec-1) - 1.0

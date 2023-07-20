@@ -150,6 +150,8 @@ def parse_args():
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
+    #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
+    parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
@@ -301,61 +303,56 @@ class QAgent():
 
 
 
-    def act(self, dict_obs, completed_episodes, training=True):
+    def act(self, dict_obs, epsilon=None, others_explo=None, training=True):
         #print(dict_obs)
-        normalized_obs = self.env.normalize_obs(dict_obs)
         #dict_obs = TensorDict(dict_obs,batch_size=[])
 
         obs, avail_actions = normalized_obs['observation'], normalized_obs['action_mask']
 
-        #assert obs[-2] == self.agent_id
-        assert sum(avail_actions)>0, avail_actions
-        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
-        #print('avail_actions_ind', avail_actions_ind)
-        
-        epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
+        avail_actions = normalized_obs['action_mask']
 
-        
+        normalized_obs = self.env.normalize_obs(dict_obs)
 
-        if self.params['random_policy'] or (training and not self.boltzmann_policy and (random.random() < epsilon)):
-        #if True:
-            action = torch.tensor([np.random.choice(avail_actions_ind)])
-            #print(avail_actions_ind, action)
-            probability = epsilon/sum(avail_actions)
-        else:
-            with torch.no_grad():
-                obs = torch.Tensor(obs)
-                if self.params['add_epsilon']:
-                    obs = torch.cat((obs, torch.tensor([epsilon])), 0)
-                q_values = self.q_network(obs.to(self.device)).cpu()
+        with torch.no_grad():
+            obs = torch.Tensor(obs)
+            if self.params['add_epsilon']:
+                assert epsilon is not None
+                obs = torch.cat((obs, torch.tensor([epsilon])), 0)
+            if self.params['add_others_explo']:
+                assert others_explo is not None
+                obs = torch.cat((obs, torch.tensor([others_explo])), 0)
 
-                if self.boltzmann_policy:
-                    tres = torch.nn.Threshold(0.001, 0.001)
-                    probabilities = tres(q_values)*avail_actions
-                    min_q_value = torch.min(q_values + (1.0-avail_actions)*9999.0)
-                    probabilities -= probabilities.min()
-                    probabilities /= probabilities.sum()
+            q_values = self.q_network(obs.to(self.device)).cpu()
 
-                    action = torch.multinomial(probabilities, 1)
-                    probability = probabilities[action]
-                else:
-                    assert sum(avail_actions)>0, avail_actions
-                    considered_q_values = q_values + (avail_actions-1.0)*9999.0
-                    #print(considered_q_values)
-                    action = torch.argmax(considered_q_values).reshape(1)
-                    #print(action)
-                    probability = 1.0-epsilon if training else 1.0
+            if self.boltzmann_policy:
+                tres = torch.nn.Threshold(0.001, 0.001)
+                probabilities = tres(q_values)*avail_actions
+                min_q_value = torch.min(q_values + (1.0-avail_actions)*9999.0)
+                probabilities -= probabilities.min()
+                probabilities /= probabilities.sum()
+
+                action = torch.multinomial(probabilities, 1)
+                probability = probabilities[action]
+            else:
+                assert sum(avail_actions)>0, avail_actions
+                considered_q_values = q_values + (avail_actions-1.0)*9999.0
+                #print(considered_q_values)
+                action = torch.argmax(considered_q_values).reshape(1)
+                #print(action)
+                probability = 1.0-epsilon if training else 1.0
 
         assert probability > 0.0 , (probability, epsilon)
         #assert action in avail_actions_ind
+        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+
         if action not in avail_actions_ind:
             #print(avail_actions_ind)
             action = torch.tensor([np.random.choice(avail_actions_ind)])
             probability = epsilon/sum(avail_actions)
 
-        if completed_episodes % 1000 == 0:
-            self.writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
-            self.writer.add_scalar(self.name+"/action", action, completed_episodes)
+        #if completed_episodes % 1000 == 0:
+        #    self.writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
+        #    self.writer.add_scalar(self.name+"/action", action, completed_episodes)
 
         return action, probability
 
@@ -429,6 +426,11 @@ class QAgent():
                     weights *= self.importance_weight(sample, completed_episodes)
                     #print('Shapes:',td_target.shape, old_val.shape, weight.shape)
                 loss = weighted_mse_loss(td_target, old_val, weights)
+
+                #if self.params['predict_others_likelyhood']:
+                    #obs = torch.cat((obs, torch.tensor([epsilon])), 0)
+
+
                 #else:
                 #    loss = F.mse_loss(td_target, old_val)
 
@@ -737,12 +739,28 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         #        obs[a]['observation'] = env.state()
 
         actions, probabilities = {}, {}
+
+        epsilon = linear_schedule(params.start_e, params.end_e, params.exploration_fraction * completed_episodes, completed_episodes)
+        act_randomly = {agent: params['random_policy'] or (random.random() < epsilon and training) for agent in env.agents}
+
         for agent in env.agents:
-            action, prbability = q_agents[agent].act(obs[agent], completed_episodes, training)
+            avail_actions = obs[agent]['action_mask']
+
+            if act_randomly[agent]:
+                assert sum(avail_actions)>0, avail_actions
+
+                avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+                action = torch.tensor([np.random.choice(avail_actions_ind)])
+                #print(avail_actions_ind, action)
+                probability = epsilon/sum(avail_actions)
+            else:
+                act_randomly = list(act_randomly.values()) # NOT CLEAN
+                action, probability = q_agents[agent].act(obs[agent], epsilon, act_randomly, training)
             actions[agent] = action
-            probabilities[agent] = prbability
+            probabilities[agent] = probability
 
         #actions = {agent: np.random.choice(np.nonzero(obs[agent]['action_mask'])[0]) for agent in env.agents}  
+        #print("actions:", actions)
         if verbose:
             print("actions:", actions)
             print("probabilities:", probabilities)
