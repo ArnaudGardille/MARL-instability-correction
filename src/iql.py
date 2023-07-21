@@ -59,33 +59,33 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
-    parser.add_argument("--seed", type=int, default=1,
+    parser.add_argument("--seed", type=int, default=0,
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--display-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--display-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to show the video")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model into the `runs/{run_name}` folder")
-    parser.add_argument("--upload-model", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--upload-model", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to upload the saved model to huggingface")
     parser.add_argument("--hf-entity", type=str, default="",
         help="the user or org name of the model repository from the Hugging Face Hub")
-    parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
-    parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--load-buffer", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--load-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to save images of the V or Q* functions")
     parser.add_argument("--run-name", type=str, default=None)
     
@@ -95,8 +95,8 @@ def parse_args():
     parser.add_argument("--y-max", type=int, default=4)
     parser.add_argument("--t-max", type=int, default=10)
     parser.add_argument("--n-agents", type=int, default=2)
-    parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--num-envs", type=int, default=1,
+    parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--num-envs", type=int, 
         help="the number of parallel game environments")
 
     # Algorithm specific arguments
@@ -106,52 +106,55 @@ def parse_args():
         help="the experiment from which to load agents.")
     parser.add_argument("--load-buffer-from", type=str, default=None,
         help="the experiment from which to load agents.")
-    parser.add_argument("--random-policy", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--random-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to show the video")
-    parser.add_argument("--total-timesteps", type=int, default=100000,
+    parser.add_argument("--total-timesteps", type=int, #
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=1e-3,
+    parser.add_argument("--learning-rate", type=float, #default=1e-3,
         help="the learning rate of the optimizer")
-    parser.add_argument("--buffer-size", type=int, default=1000000,
+    parser.add_argument("--buffer-size", type=int, #
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.99,
+    parser.add_argument("--gamma", type=float, #default=0.99,
         help="the discount factor gamma")
-    parser.add_argument("--tau", type=float, default=1.,
+    parser.add_argument("--tau", type=float, #default=1.,
         help="the target network update rate")
-    parser.add_argument("--evaluation-frequency", type=int, default=1000)
-    parser.add_argument("--evaluation-episodes", type=int, default=100)
-    parser.add_argument("--target-network-frequency", type=int, default=500,
+    parser.add_argument("--evaluation-frequency", type=int, #default=1000
+                        )
+    parser.add_argument("--evaluation-episodes", type=int, #default=100
+                        )
+    parser.add_argument("--target-network-frequency", type=int, # 
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int, default= 1000, #2**18, #256, #
+    parser.add_argument("--batch-size", type=int,  #2**18, #256, #
         help="the batch size of sample from the reply memory")
-    parser.add_argument("--start-e", type=float, default=1,
+    parser.add_argument("--start-e", type=float, 
         help="the starting epsilon for exploration")
     parser.add_argument("--end-e", type=float, default=0.05,
         help="the ending epsilon for exploration")
     parser.add_argument("--exploration-fraction", type=float, default=0.5,
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
-    parser.add_argument("--learning-starts", type=int, default=1000,
+    parser.add_argument("--learning-starts", type=int, 
         help="timestep to start learning")
-    parser.add_argument("--train-frequency", type=int, default=100,
+    parser.add_argument("--train-frequency", type=int, 
         help="the frequency of training")
-    parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to use a single network for all agents. Identity is the added to observation")
-    parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to add agents identity to observation")
-    parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to add epsilon to observation")
-    parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to use a dueling network architecture.")
-    parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
-    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
     #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
-    parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True)
+    parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
@@ -307,11 +310,10 @@ class QAgent():
         #print(dict_obs)
         #dict_obs = TensorDict(dict_obs,batch_size=[])
 
-        obs, avail_actions = normalized_obs['observation'], normalized_obs['action_mask']
-
-        avail_actions = normalized_obs['action_mask']
-
         normalized_obs = self.env.normalize_obs(dict_obs)
+        obs, avail_actions = normalized_obs['observation'], normalized_obs['action_mask']
+        #avail_actions = normalized_obs['action_mask']
+
 
         with torch.no_grad():
             obs = torch.Tensor(obs)
@@ -320,7 +322,7 @@ class QAgent():
                 obs = torch.cat((obs, torch.tensor([epsilon])), 0)
             if self.params['add_others_explo']:
                 assert others_explo is not None
-                obs = torch.cat((obs, torch.tensor([others_explo])), 0)
+                obs = torch.cat((obs, torch.tensor(others_explo)), 0)
 
             q_values = self.q_network(obs.to(self.device)).cpu()
 
@@ -479,8 +481,8 @@ class QAgent():
         return 1.0/(priorities*size_buffer)
         
 
-    def add_to_rb(self, obs, action, probabilities, reward, next_obs, terminated, truncated=False, infos=None, completed_episodes=0):
-        
+    def add_to_rb(self, obs, act_randomly, action, probabilities, reward, next_obs, terminated, truncated=False, infos=None, completed_episodes=0):
+        #print("act_randomly:", act_randomly)
         obs = deepcopy(obs)
         next_obs = deepcopy(next_obs)
         normalized_obs, normalized_next_obs, dones = {}, {}, {}
@@ -498,7 +500,12 @@ class QAgent():
                 epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
                 normalized_obs[a]['observation'] = torch.cat((normalized_obs[a]['observation'], torch.tensor([epsilon])), 0)
                 normalized_next_obs[a]['observation'] = torch.cat((normalized_next_obs[a]['observation'], torch.tensor([epsilon])), 0)
-
+        if self.params['add_others_explo']:
+            for a in obs:
+                epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
+                normalized_obs[a]['observation'] = torch.cat((normalized_obs[a]['observation'], torch.tensor(act_randomly)), 0)
+                normalized_next_obs[a]['observation'] = torch.cat((normalized_next_obs[a]['observation'], torch.tensor(act_randomly)), 0)
+        
         #normalized_obs = self.env.normalize_obs(obs)
         for a in obs:
             assert torch.sum(obs[a]['action_mask']) > 0 
@@ -740,10 +747,14 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
         actions, probabilities = {}, {}
 
-        epsilon = linear_schedule(params.start_e, params.end_e, params.exploration_fraction * completed_episodes, completed_episodes)
+        epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
         act_randomly = {agent: params['random_policy'] or (random.random() < epsilon and training) for agent in env.agents}
+        
 
         for agent in env.agents:
+            other_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
+            act_randomly_list = list(other_act_randomly.values()) # NOT CLEAN
+
             avail_actions = obs[agent]['action_mask']
 
             if act_randomly[agent]:
@@ -754,8 +765,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
                 #print(avail_actions_ind, action)
                 probability = epsilon/sum(avail_actions)
             else:
-                act_randomly = list(act_randomly.values()) # NOT CLEAN
-                action, probability = q_agents[agent].act(obs[agent], epsilon, act_randomly, training)
+                action, probability = q_agents[agent].act(obs[agent], epsilon, act_randomly_list, training)
             actions[agent] = action
             probabilities[agent] = probability
 
@@ -773,7 +783,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         # On entraine pas, mais on complete quand meme le replay buffer
             for agent in obs:
                 #q_agents[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
-                q_agents[agent].add_to_rb(obs, actions, probabilities, rewards, next_obs, terminations, truncations, infos, completed_episodes=completed_episodes)
+                q_agents[agent].add_to_rb(obs, act_randomly_list, actions, probabilities, rewards, next_obs, terminations, truncations, infos, completed_episodes=completed_episodes)
 
         #episodic_returns = {k: rewards.get(k, 0) + episodic_returns.get(k, 0) for k in set(rewards) | set(episodic_returns)}
         episodic_return += np.mean(list(rewards.values())) 
@@ -804,7 +814,11 @@ def run_training(seed=0, verbose=True, **args):
     with open(Path('src/config/default.yaml')) as f:
         params = yaml.safe_load(f)
     
-    params.update(args)
+    for k, v in args.items():
+        if v is not None:
+            params[k] = v
+    #params.update(args)
+    pprint(params)
 
     if params['run_name'] is None:
         params['run_name'] = f"iql_{int(time.time())}"
@@ -868,6 +882,8 @@ def run_training(seed=0, verbose=True, **args):
 
     if params['add_epsilon']:
         size_obs += 1
+    if params['add_others_explo']:
+        size_obs += env.num_agents - 1
     
     ### Creating Agents
     
@@ -938,15 +954,16 @@ def run_training(seed=0, verbose=True, **args):
 
 def main(**params):
 
-    steps, results = run_training(run_name='test', seed=0, **params)
+    steps, results = run_training(**params)
     print("results:", results)
     #print("Average total reward", total_reward / args.total_timesteps)
 
 
 if __name__ == "__main__":
-    #args = parse_args()
-    #main(**vars(args))
-    params = {
-        'total_timesteps': 1010
-    }
-    main(**params)
+    args = parse_args()
+    main(**vars(args))
+    #params = {
+    #    'total_timesteps': 1010
+    #}
+    #main(**params)
+    #main()
