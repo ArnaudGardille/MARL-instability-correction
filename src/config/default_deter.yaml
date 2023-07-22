@@ -29,9 +29,9 @@ num_envs: 1
 env_id: "water-bomber-v0"
 random_policy: False
 no_training: False
-total_timesteps: 50000
+total_timesteps: 20000
 learning_rate: 0.001
-buffer_size: 500000
+buffer_size: 100000
 gamma: 0.99
 tau: 1.
 evaluation_frequency: 1000

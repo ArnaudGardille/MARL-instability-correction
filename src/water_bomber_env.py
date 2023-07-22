@@ -42,7 +42,7 @@ class WaterBomberEnv(ParallelEnv):
     self.agents = copy(self.possible_agents)
 
     if deterministic:
-      assert self.X_MAX==4 and self.Y_MAX==4 and self.T_MAX==20 and self.N_AGENTS==2
+      assert self.X_MAX==4 and self.Y_MAX==4 and self.T_MAX==20 and self.N_AGENTS==2, (self.X_MAX==4, self.Y_MAX==4, self.T_MAX==20, self.N_AGENTS==2)
       self.fires = [[2,3],[4,3]]
       self.water_bombers = {"water_bomber_0":[0,2],"water_bomber_1":[2,2]}
     else:
