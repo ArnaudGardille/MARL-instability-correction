@@ -425,6 +425,7 @@ class QAgent():
 
                 td_target = td_target.to(self.device)
                 old_val = old_val.to(self.device)
+                weights = weights.to(self.device)
 
                 if self.loss_corrected_for_others:
                     weights *= self.importance_weight(sample, completed_episodes)
