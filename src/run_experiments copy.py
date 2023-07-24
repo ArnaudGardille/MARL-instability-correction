@@ -79,7 +79,6 @@ def parse_args():
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*",)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], nargs="*",
         help="whether to use a prioritized replay buffer.")
-    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"

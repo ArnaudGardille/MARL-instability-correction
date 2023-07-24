@@ -232,8 +232,8 @@ class QAgent():
         self.writer = writer
 
         self.device = torch.device("cuda" if torch.cuda.is_available() and params['cuda'] else "cpu")
+        self.device = torch.device("mps") if torch.backends.mps.is_available() and params['cuda'] else self.device
         
-
         self.env = env
 
         self.agent_id  = int(name[-1])
@@ -423,6 +423,8 @@ class QAgent():
                     #elif self.params['']rb == 'prioritized':
                     weights = sample['_weight']
 
+                td_target = td_target.to(self.device)
+                old_val = old_val.to(self.device)
 
                 if self.loss_corrected_for_others:
                     weights *= self.importance_weight(sample, completed_episodes)
