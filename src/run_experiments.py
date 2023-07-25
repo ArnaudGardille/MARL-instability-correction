@@ -7,6 +7,7 @@ import os
 import datetime
 from distutils.util import strtobool
 import argparse 
+import yaml
 
 sns.set_theme(style="darkgrid")
 sns.set(rc={'figure.figsize':(11.7,8.27)})
@@ -124,7 +125,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 10
+NB_RUNS = 3
 
 modified_params = [None, None]
 

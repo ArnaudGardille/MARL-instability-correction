@@ -427,6 +427,12 @@ class QAgent():
                 if self.loss_corrected_for_others:
                     weights *= self.importance_weight(sample, completed_episodes)
                     #print('Shapes:',td_target.shape, old_val.shape, weight.shape)
+
+                td_target = td_target.to(self.device)
+                old_val = old_val.to(self.device)
+                weights = weights.to(self.device)
+
+
                 loss = weighted_mse_loss(td_target, old_val, weights)
 
                 #if self.params['predict_others_likelyhood']:
