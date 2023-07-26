@@ -413,7 +413,7 @@ class QAgent():
                 #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
                 old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
 
-                weights = torch.ones(self.batch_size)
+                weights = torch.ones(self.batch_size).to(self.device)
                 
                 if (self.params['rb'] != 'uniform') and self.loss_not_corrected_for_priorisation:
                     #priorities = self.compute_priorities(td_error)
@@ -508,9 +508,9 @@ class QAgent():
                 normalized_next_obs[a]['observation'] = torch.cat((normalized_next_obs[a]['observation'], torch.tensor([epsilon])), 0)
         if self.params['add_others_explo']:
             for a in obs:
-                epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
                 normalized_obs[a]['observation'] = torch.cat((normalized_obs[a]['observation'], torch.tensor(act_randomly)), 0)
                 normalized_next_obs[a]['observation'] = torch.cat((normalized_next_obs[a]['observation'], torch.tensor(act_randomly)), 0)
+        
         
         #normalized_obs = self.env.normalize_obs(obs)
         for a in obs:
@@ -558,7 +558,9 @@ class QAgent():
         #save_to_pkl(buffer_path, self.replay_buffer)
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
-        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        add_expl = "_expl" if self.add_others_explo else ""
+
+        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+add_expl+'_replay_buffer.pickle')
         with open(path, 'wb') as handle:
             pickle.dump(self.replay_buffer[:], handle)
         
@@ -569,8 +571,9 @@ class QAgent():
         #assert isinstance(self.replay_buffer, ReplayBuffer), "The replay buffer must inherit from ReplayBuffer class"
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
+        add_expl = "_expl" if self.add_others_explo else ""
 
-        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+'_replay_buffer.pickle')
+        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+add_expl+'_replay_buffer.pickle')
         with open(path, 'rb') as handle:
             data = pickle.load(handle)
 
@@ -760,7 +763,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         for agent in env.agents:
             other_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
             act_randomly_list = list(other_act_randomly.values()) # NOT CLEAN
-
+            assert len(act_randomly_list) == env.num_agents - 1
             avail_actions = obs[agent]['action_mask']
 
             if act_randomly[agent]:
@@ -788,7 +791,9 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         if training:
         # On entraine pas, mais on complete quand meme le replay buffer
             for agent in obs:
-                #q_agents[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
+                other_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
+                #q_ageother_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
+                act_randomly_list = list(other_act_randomly.values()) # NOT CLEANnts[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
                 q_agents[agent].add_to_rb(obs, act_randomly_list, actions, probabilities, rewards, next_obs, terminations, truncations, infos, completed_episodes=completed_episodes)
 
         #episodic_returns = {k: rewards.get(k, 0) + episodic_returns.get(k, 0) for k in set(rewards) | set(episodic_returns)}
@@ -890,7 +895,7 @@ def run_training(seed=0, verbose=True, **args):
         size_obs += 1
     if params['add_others_explo']:
         size_obs += env.num_agents - 1
-    
+    print("Size obs:", size_obs)
     ### Creating Agents
     
     q_agents = {a:QAgent(env, a, params, size_obs, size_act, writer)  for a in env.agents} 
