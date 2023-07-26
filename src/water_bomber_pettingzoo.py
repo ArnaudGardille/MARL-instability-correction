@@ -5,29 +5,16 @@ from copy import copy
 import numpy as np
 from gymnasium.spaces import *
 
-from gymnasium import Env
+from sklearn.preprocessing import OneHotEncoder
+from pettingzoo.utils.env import ParallelEnv
+from pettingzoo.test import parallel_api_test
+
 #factorielle = lambda n: n * factorielle(n-1) if n > 0 else 1
 import torch
 from random import randint
 import time
-from enum import Enum
 
-class Action(Enum):
-    NONE = 0
-    NORTH = 1
-    SOUTH = 2
-    WEST = 3
-    EAST = 4
-
-
-class CellEntity(Enum):
-    # entity encodings for grid observations
-    OUT_OF_BOUNDS = 0
-    EMPTY = 1
-    FOOD = 2
-    AGENT = 3
-
-class WaterBomberEnv(Env):
+class WaterBomberEnv(ParallelEnv):
   metadata = {
     "name": "water-bomber-env_v0",
   }
@@ -39,7 +26,7 @@ class WaterBomberEnv(Env):
     self.T_MAX = t_max
     self.N_AGENTS = n_agents
 
-    self.players = [Player() for _ in range(n_agents)]
+
     self.possible_agents = ["water_bomber_"+str(i) for i in range(n_agents)]
     self.symbols = {"water_bomber_"+str(i):str(i) for i in range(n_agents)}
     self.verbose = False
