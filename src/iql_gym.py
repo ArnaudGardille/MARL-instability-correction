@@ -801,8 +801,8 @@ def run_training(seed=0, verbose=True, **args):
     if params['track']:
         import wandb
 
-        wandb.init(
-            project=params['wandb_project_name'],
+        run = wandb.init(
+            project=params['Stabilizing MARL'],
             entity=params['wandb_entity'],
             sync_tensorboard=True,
             config=vars(args),
@@ -898,6 +898,10 @@ def run_training(seed=0, verbose=True, **args):
 
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             writer.add_scalar("Average Return", average_return, completed_episodes)
+            run.log({
+                        "Average Return":average_return, 
+                        "Completed Episodes:":completed_episodes
+                    })
             #writer.add_scalar("Average duration", average_duration, completed_episodes)
             pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
             results.append(average_return)
