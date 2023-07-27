@@ -7,6 +7,7 @@ import numpy as np
 from time import sleep
 from copy import deepcopy
 import pickle
+import pandas as pd 
 import sys
 scale = 0.25   
 
@@ -238,7 +239,7 @@ class QAgent():
         self.env = env
 
         self.agent_id  = agent_id
-        self.action_space = env.action_space(agent_id)
+        self.action_space = env.action_space[agent_id]
 
         if self.dueling:
             network_class=DuelingQNetwork
@@ -252,16 +253,16 @@ class QAgent():
         self.target_network.load_state_dict(self.q_network.state_dict())
 
         #observation_space = env.observation_space(agent_id)
-        #print(self.buffer_size,env.observation_space(self.name),env.action_space(self.name),self.device)
+        #print(self.buffer_size,env.observation_space(self.agent_id),env.action_space(self.agent_id),self.device)
         """observation_space = Dict({
-            'observation': env.observation_space(self.name),
-            'action_mask': env.observation_space(self.name)['action_mask']
+            'observation': env.observation_space(self.agent_id),
+            'action_mask': env.observation_space(self.agent_id)['action_mask']
         })"""
 
         """self.replay_buffer = DictReplayBuffer(
             self.buffer_size,
-            env.observation_space(self.name), #env.observation_space(self.name)
-            env.action_space(self.name),
+            env.observation_space(self.agent_id), #env.observation_space(self.agent_id)
+            env.action_space(self.agent_id),
             self.device,handle_timeout_termination=False,
             )"""
         self.rb_storage = LazyTensorStorage(self.buffer_size)
@@ -306,14 +307,7 @@ class QAgent():
 
 
 
-    def act(self, dict_obs, epsilon=None, others_explo=None, training=True):
-        #print(dict_obs)
-        #dict_obs = TensorDict(dict_obs,batch_size=[])
-
-        normalized_obs = self.env.normalize_obs(dict_obs)
-        obs, avail_actions = normalized_obs['observation'], normalized_obs['action_mask']
-        #avail_actions = normalized_obs['action_mask']
-
+    def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
 
         with torch.no_grad():
             obs = torch.Tensor(obs)
@@ -341,22 +335,19 @@ class QAgent():
                 #print(considered_q_values)
                 action = torch.argmax(considered_q_values).reshape(1)
                 #print(action)
-                probability = 1.0-epsilon if training else 1.0
 
-        assert probability > 0.0 , (probability, epsilon)
         #assert action in avail_actions_ind
-        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+        avail_actions_ind = np.nonzero(avail_actions)[0].reshape(-1)
 
-        if action not in avail_actions_ind:
-            #print(avail_actions_ind)
+        if int(action) not in avail_actions_ind:
+            print(action, avail_actions_ind)
             action = torch.tensor([np.random.choice(avail_actions_ind)])
-            probability = epsilon/sum(avail_actions)
 
         #if completed_episodes % 1000 == 0:
-        #    self.writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
-        #    self.writer.add_scalar(self.name+"/action", action, completed_episodes)
+        #    self.writer.add_scalar(str(self.agent_id)+"/epsilon", epsilon, completed_episodes)
+        #    self.writer.add_scalar(str(self.agent_id)+"/action", action, completed_episodes)
 
-        return action, probability
+        return action
 
     def train(self, completed_episodes):
         # ALGO LOGIC: training.
@@ -384,34 +375,26 @@ class QAgent():
                 else:
                     sample = self.replay_buffer.sample()
 
-                #if "td" not in sample.keys():
-                #    print(sample.keys())
-                #    sample.set("td", torch.ones(self.batch_size))
-                
-                #if self.params['']rb == 'prioritized':
-                #    print('index', sample["index"])
-                #print('sample:', sample)
-
                 sample = sample.to(self.device)
                 #action_mask = data.next_observations['action_mask']
-                normalized_obs = sample['observations']
-                #normalized_obs = self.env.normalize_obs(observations).to(self.device)
+                obs = sample['observations']
+                #obs = self.env.normalize_obs(observations).to(self.device)
                 action_mask = sample['action_mask']
                 
-                normalized_next_obs = sample['next_observations']
-                #normalized_next_obs = self.env.normalize_obs(next_observations).to(self.device)
+                next_obs = sample['next_observations']
+                #next_obs = self.env.normalize_obs(next_observations).to(self.device)
                 next_action_mask = sample['next_action_mask']
                 #assert next_observations[0][-2] == self.agent_id
-                assert torch.all(torch.sum(action_mask, 1) >0), (normalized_obs,action_mask)
+                assert torch.all(torch.sum(action_mask, 1) >0), (obs,action_mask)
                 assert torch.all(torch.sum(next_action_mask, 1) >0), action_mask
                 
                 with torch.no_grad():
-                    target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
-                    #print(sample['rewards'][self.name].shape, target_max.shape,  sample['dones'].shape)
+                    target_max, _ = (self.target_network(next_obs)*next_action_mask).max(dim=1)
+                    #print(sample['rewards'][self.agent_id].shape, target_max.shape,  sample['dones'].shape)
                     td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
-                #print(self.q_network(normalized_obs).shape, action_mask.shape, sample['actions'][self.name].shape)
-                #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
-                old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
+                #print(self.q_network(obs).shape, action_mask.shape, sample['actions'][self.agent_id].shape)
+                #old_val = (self.q_network(obs)*action_mask).gather(1, sample['actions'][self.agent_id].unsqueeze(0)).squeeze()
+                old_val = (self.q_network(obs)*action_mask).gather(1, sample['actions']).squeeze()
 
                 weights = torch.ones(self.batch_size).to(self.device)
                 
@@ -450,9 +433,9 @@ class QAgent():
                     #sample['td']
                     self.replay_buffer.update_tensordict_priority(sample)
 
-                self.writer.add_scalar(self.name+"/td_loss", loss, completed_episodes)
-                self.writer.add_scalar(self.name+"/q_values", old_val.mean().item(), completed_episodes)
-                self.writer.add_scalar(self.name+"/size replay buffer", len(self.replay_buffer), completed_episodes)
+                self.writer.add_scalar(str(self.agent_id)+"/td_loss", loss, completed_episodes)
+                self.writer.add_scalar(str(self.agent_id)+"/q_values", old_val.mean().item(), completed_episodes)
+                self.writer.add_scalar(str(self.agent_id)+"/size replay buffer", len(self.replay_buffer), completed_episodes)
 
                 self.writer.flush()
 
@@ -485,67 +468,55 @@ class QAgent():
         if self.params['rb'] == 'laber':
             size_buffer *= 4.0
         return 1.0/(priorities*size_buffer)
-        
 
-    def add_to_rb(self, obs, act_randomly, action, probabilities, reward, next_obs, terminated, truncated=False, infos=None, completed_episodes=0):
+    def add_to_rb(self, obs, act_randomly, action, action_mask, probabilities, reward, next_obs, next_action_mask, terminated, truncated=False, infos=None, completed_episodes=0):
         #print("act_randomly:", act_randomly)
         obs = deepcopy(obs)
         next_obs = deepcopy(next_obs)
-        normalized_obs, normalized_next_obs, dones = {}, {}, {}
-        for a in obs:
-            if self.params['env_normalization']:
-                normalized_obs[a] = self.env.normalize_obs(obs[a])
-                normalized_next_obs[a] = self.env.normalize_obs(next_obs[a])
-            else:
-                normalized_obs[a] = obs[a]
-                normalized_next_obs[a] = next_obs[a]
-            dones[a] = torch.tensor(terminated[a] or truncated[a], dtype=torch.float)
+        action = deepcopy(action)
 
         if self.params['add_epsilon']:
             for a in obs:
                 epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
-                normalized_obs[a]['observation'] = torch.cat((normalized_obs[a]['observation'], torch.tensor([epsilon])), 0)
-                normalized_next_obs[a]['observation'] = torch.cat((normalized_next_obs[a]['observation'], torch.tensor([epsilon])), 0)
+                obs = torch.cat((obs, torch.tensor([epsilon])), 0)
+                next_obs = torch.cat((next_obs, torch.tensor([epsilon])), 0)
         if self.params['add_others_explo']:
             for a in obs:
-                normalized_obs[a]['observation'] = torch.cat((normalized_obs[a]['observation'], torch.tensor(act_randomly)), 0)
-                normalized_next_obs[a]['observation'] = torch.cat((normalized_next_obs[a]['observation'], torch.tensor(act_randomly)), 0)
+                obs = torch.cat((obs, torch.tensor(act_randomly)), 0)
+                next_obs = torch.cat((next_obs, torch.tensor(act_randomly)), 0)
         
         
-        #normalized_obs = self.env.normalize_obs(obs)
+        #obs = self.env.normalize_obs(obs)
         for a in obs:
-            assert torch.sum(obs[a]['action_mask']) > 0 
-            assert torch.sum(next_obs[a]['action_mask']) > 0 
-        #normalized_next_obs = self.env.normalize_obs(next_obs)
+            assert sum(action_mask) > 0 
+            assert sum(next_action_mask) > 0 
+        #next_obs = self.env.normalize_obs(next_obs)
 
         transition = {
-            'observations':normalized_obs,
-            'actions':action,
-            'actions_likelihood':probabilities,
-            'rewards':reward,
-            'next_observations':normalized_next_obs,
-            'dones':dones,
+            'observations':torch.tensor(obs, dtype=torch.float32).reshape(-1),
+            'action_mask':torch.tensor(action_mask, dtype=torch.int64).reshape(-1),
+            'actions':torch.tensor(action, dtype=torch.int64).reshape(-1),
+            'actions_likelihood':torch.tensor(probabilities, dtype=torch.float32).reshape(-1),
+            'rewards':torch.tensor(reward, dtype=torch.float32).reshape(-1),
+            'next_observations':torch.tensor(next_obs, dtype=torch.float32).reshape(-1),
+            'next_action_mask':torch.tensor(next_action_mask, dtype=torch.int64).reshape(-1),
+            'dones':torch.tensor(terminated, dtype=torch.float32).reshape(-1),
             #'td': 1.0#{a:1.0 for a in obs}
         }
         
         #print('transition:', transition)
         transition = TensorDict(transition,batch_size=[])
-        for a in obs:
-            #print('-'*20)
-            #print(a, transition['observations'])
-            assert torch.sum(transition['observations'][a]['action_mask']) > 0, transition['observations'][a]['action_mask']
-            assert torch.sum(transition['next_observations'][a]['action_mask']) > 0, transition['next_observations'][a]['action_mask']
         self.replay_buffer.add(transition)
 
 
     def save(self):
 
-        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.name}.cleanrl_model")
+        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.agent_id}.cleanrl_model")
         torch.save(self.q_network.state_dict(), model_path)
         #print(f"model saved to {model_path}")
 
     def load(self, model_path):
-        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.name}.cleanrl_model")
+        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.agent_id}.cleanrl_model")
         self.q_network.load_state_dict(torch.load(model_path))
         print(f"model sucessfullt loaded from to {model_path}")
         
@@ -554,13 +525,13 @@ class QAgent():
         return ""
     
     def save_rb(self):
-        #buffer_path = f"runs/{params['run_name']}/saved_models/{self.name}_buffer.pkl"
+        #buffer_path = f"runs/{params['run_name']}/saved_models/{self.agent_id}_buffer.pkl"
         #save_to_pkl(buffer_path, self.replay_buffer)
         env_type = "_det" if self.deterministic_env else "_rd"
         add_eps = "_eps" if self.add_epsilon else ""
         add_expl = "_expl" if self.add_others_explo else ""
 
-        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+add_expl+'_replay_buffer.pickle')
+        path = Path.cwd() / 'rbs' / Path(str(self.agent_id)+env_type+add_eps+add_expl+'_replay_buffer.pickle')
         with open(path, 'wb') as handle:
             pickle.dump(self.replay_buffer[:], handle)
         
@@ -573,7 +544,7 @@ class QAgent():
         add_eps = "_eps" if self.add_epsilon else ""
         add_expl = "_expl" if self.add_others_explo else ""
 
-        path = Path.cwd() / 'rbs' / Path(self.agent_id+env_type+add_eps+add_expl+'_replay_buffer.pickle')
+        path = Path.cwd() / 'rbs' / Path(str(self.agent_id)+env_type+add_eps+add_expl+'_replay_buffer.pickle')
         with open(path, 'rb') as handle:
             data = pickle.load(handle)
 
@@ -581,16 +552,16 @@ class QAgent():
 
     def get_td_error(self, sample):
         sample = sample.to(self.device)
-        normalized_obs = sample['observation']
+        obs = sample['observation']
         action_mask = sample['action_mask']
-        normalized_next_obs = sample['next_observations']
+        next_obs = sample['next_observations']
         next_action_mask = sample['next_action_mask']
         
         with torch.no_grad():
-            target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
-            #print(sample['rewards'][self.name].shape, target_max.shape,  sample['dones'][self.name].shape)
+            target_max, _ = (self.target_network(next_obs)*next_action_mask).max(dim=1)
+            #print(sample['rewards'][self.agent_id].shape, target_max.shape,  sample['dones'][self.agent_id].shape)
             td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
-            old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
+            old_val = (self.q_network(obs)*action_mask).gather(1, sample['actions']).squeeze()
 
             td_error = torch.abs(td_target-old_val)
         return td_error
@@ -598,8 +569,8 @@ class QAgent():
     def visualize_q_values(self, env, completed_episodes):
         arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-        observation, _ = env.reset(deterministic=True)
-        observation = observation[self.name] #['observation']
+        observation, _ = env.reset()
+        observation = observation[self.agent_id] #['observation']
         #observation['observation'][-1] = 5
         #assert observation[-2] == self.agent_id
 
@@ -615,11 +586,11 @@ class QAgent():
                 #print(observation)
 
                 action_mask= env.get_action_mask(x,y)
-                normalized_obs = self.env.normalize_obs(observation)
-                #print('normalized_obs:', normalized_obs)
-                normalized_obs = TensorDict(normalized_obs, batch_size=[]).to(self.device)
+                obs = self.env.normalize_obs(observation)
+                #print('obs:', obs)
+                obs = TensorDict(obs, batch_size=[]).to(self.device)
                 #print(self.q_network(observation).detach().cpu()*action_mask)
-                pred = self.q_network(normalized_obs['observation']).detach().cpu()
+                pred = self.q_network(obs['observation']).detach().cpu()
                 target = pred + (action_mask-1)*9999.0
                 #target = torch.argmax(considered_q_values).numpy()
 
@@ -629,7 +600,7 @@ class QAgent():
                 target_argmax = target.argmax()
 
                 if self.dueling:
-                    v_values[ x, y] = self.q_network(normalized_obs['observation'], value_only=True).detach().cpu()
+                    v_values[ x, y] = self.q_network(obs['observation'], value_only=True).detach().cpu()
 
                 #clipped_target_max = (np.clip(target_max, -10, 10) + 10)/ 20
                 #q_values[0, x, y] = clipped_target_max 
@@ -644,7 +615,7 @@ class QAgent():
         fig.colorbar(im, ax=ax, label='Interactive colorbar')
 
 
-        #self.writer.add_image(self.name+"/q_values_imgs", q_values, completed_episodes)
+        #self.writer.add_image(str(self.agent_id)+"/q_values_imgs", q_values, completed_episodes)
 
 
         #fig, ax = plt.subplots(figsize=(6, 6))
@@ -653,7 +624,7 @@ class QAgent():
                 if choosen_act[x,y] != 4:
                     plt.arrow(x, 4-y, scale*arrows[choosen_act[x,y]][0], scale*arrows[choosen_act[x,y]][1], head_width=0.1)
 
-        self.writer.add_figure(self.name+"/q*_values_imgs", fig, completed_episodes)
+        self.writer.add_figure(str(self.agent_id)+"/q*_values_imgs", fig, completed_episodes)
 
         if self.dueling:
             fig, ax = plt.subplots()
@@ -661,7 +632,7 @@ class QAgent():
 
             fig.colorbar(im, ax=ax, label='Interactive colorbar')
 
-            self.writer.add_figure(self.name+"/v_values_imgs", fig, completed_episodes)
+            self.writer.add_figure(str(self.agent_id)+"/v_values_imgs", fig, completed_episodes)
         
     def importance_weight(self, sample, completed_episodes):
         num, denom = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
@@ -673,13 +644,13 @@ class QAgent():
         for agent in self.env.possible_agents:
             if agent != self.agent_id:
                 sample = sample.cpu() #.to(self.device)
-                normalized_obs = sample['observations']
+                obs = sample['observations']
                 action_mask = sample['action_mask']
                 actions = sample['actions']
 
                 with torch.no_grad():
                         
-                    q_values = self.q_network(torch.Tensor(normalized_obs).to(self.device)).cpu()
+                    q_values = self.q_network(torch.Tensor(obs).to(self.device)).cpu()
 
                     if self.boltzmann_policy:
                         
@@ -728,12 +699,13 @@ class QAgent():
  
 
 
-def run_episode(env, n_agents, n_actions, completed_episodes, params, training=False, visualisation=False, verbose=False, deterministic=False):
+def run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=False, verbose=False):
     if visualisation:
-        for agent in env.agents:
-            q_agents[agent].visualize_q_values(env, completed_episodes)
+        for agent in q_agents:
+            agent.visualize_q_values(env, completed_episodes)
 
-    env.reset()
+    n_obs = env.reset()
+    n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
     terminated = False
     episode_reward = 0
     nb_steps = 0
@@ -741,14 +713,13 @@ def run_episode(env, n_agents, n_actions, completed_episodes, params, training=F
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
 
     while not terminated:
-        n_obs = env.get_obs()
+        #n_obs = env.get_obs()
         #state = env.get_state()
         # env.render()  # Uncomment for rendering
 
         actions = []
         probabilities = []
-        act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(n_agents)]
-
+        act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
         for agent_id, obs in enumerate(n_obs):
             avail_actions = env.get_avail_agent_actions(agent_id)
             avail_actions_ind = np.nonzero(avail_actions)[0]
@@ -756,27 +727,29 @@ def run_episode(env, n_agents, n_actions, completed_episodes, params, training=F
             other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
             
             if act_randomly[agent_id]:
-                action = np.random.choice(avail_actions_ind)
-                print("avail_actions", avail_actions)
+                action = np.random.choice(avail_actions_ind).reshape(-1)
                 probability = epsilon/sum(avail_actions)
             else:
-                action = q_agents[agent_id].act(obs)
-                probability = 1.0
+                avail_actions = env.get_avail_agent_actions(agent_id)
 
+                action = q_agents[agent_id].act(obs, avail_actions)
+                probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) if training else 1.0
+
+            assert probability > 0.0 , (probability, epsilon)
             
             
             actions.append(action)
             probabilities.append(probability)
 
-        n_reward, n_terminated, n_next_obs = env.step(actions)
-        episode_reward += np.mean(reward)
+        n_next_obs, n_reward, n_terminated, n_info = env.step(actions)
+        episode_reward += np.mean(n_reward)
 
 
         if training:
-            for agent_id, (obs, terminated, next_obs) in enumerate(zip(n_obs, n_terminated, n_next_obs)):
+            for agent_id, (obs, terminated, action, avail_actions, reward, next_obs) in enumerate(zip(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs)):
                 other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
-
-                q_agents[agent_id].add_to_rb(obs, other_act_randomly, actions, probabilities, rewards, next_obs, terminated, completed_episodes=completed_episodes)
+                next_avail_actions = env.get_avail_agent_actions(agent_id)
+                q_agents[agent_id].add_to_rb(obs, other_act_randomly, action, avail_actions, probabilities, reward, next_obs, next_avail_actions, terminated, completed_episodes=completed_episodes)
 
 
         if verbose:
@@ -786,7 +759,9 @@ def run_episode(env, n_agents, n_actions, completed_episodes, params, training=F
             print("reward:", reward)
 
         nb_steps += 1
-        obs = next_obs
+        n_obs = n_next_obs
+        n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
+        terminated = n_terminated[0]
 
     if training:
         if params['single_agent']:
@@ -795,11 +770,11 @@ def run_episode(env, n_agents, n_actions, completed_episodes, params, training=F
             for agent in q_agents:
                 agent.train(completed_episodes)
 
-    return nb_steps, episodic_return #episodic_returns
+    return nb_steps, episode_reward #episodic_returns
     
 def run_training(seed=0, verbose=True, **args):
 
-    with open(Path('src/config/default.yaml')) as f:
+    with open(Path('src/config_gym/default.yaml')) as f:
         params = yaml.safe_load(f)
     
     for k, v in args.items():
@@ -851,19 +826,16 @@ def run_training(seed=0, verbose=True, **args):
 
     env.reset()
 
-    agent_0 = env.agents[0]
-
-    obs_shape = env.observation_space(agent_0)['observation'].shape
-    size_obs = np.product(obs_shape)
+    obs_shape = env.observation_space[0].shape
+    size_obs = int(np.product(obs_shape))
     
-    size_act = int(env.action_space(agent_0).n)
+    size_act = int(env.action_space[0].n)
     
     if verbose:
         print('-'*20)
-        print('agents: ',env.agents)
-        print('num_agents: ',env.num_agents)
-        print('observation_space: ',env.observation_space(agent_0))
-        print('action_space: ',env.action_space(agent_0))
+        print('num_agents: ',env.n_agents)
+        print('observation_space: ',env.observation_space[0])
+        print('action_space: ',env.action_space[0])
         #print('infos: ',env.infos)    
         print('size_obs: ',size_obs)    
         print('size_act: ',size_act)    
@@ -876,7 +848,7 @@ def run_training(seed=0, verbose=True, **args):
     print("Size obs:", size_obs)
     ### Creating Agents
     
-    q_agents = {a:QAgent(env, a, params, size_obs, size_act, writer)  for a in env.agents} 
+    q_agents = [QAgent(env, a, params, size_obs, size_act, writer)  for a in range(env.n_agents)]
     
     if params['load_agents_from'] is not None:
         for name, agent in q_agents.items():
@@ -889,7 +861,7 @@ def run_training(seed=0, verbose=True, **args):
             agent.load_buffer(buffer_path)
 
     if params['single_agent']:
-        agent_0 = q_agents[env.agents[0]]
+        agent_0 = q_agents[0]
         for agent in q_agents:
             q_agents[agent].q_network = agent_0.q_network
             q_agents[agent].replay_buffer = agent_0.replay_buffer
@@ -903,12 +875,12 @@ def run_training(seed=0, verbose=True, **args):
     n_agents = env_info["n_agents"]
         
     results = []
-    for e in pbar:
+    for completed_episodes in pbar:
         if not params['no_training']:
-            run_episode(env, n_agents, n_actions, completed_episodes, params, training=False, visualisation=False, verbose=False, deterministic=False)
-        print("Total reward in episode {} = {}".format(e, episode_reward))
+            run_episode(env, q_agents, completed_episodes, params, training=True, visualisation=False, verbose=False)
+        #print("Total reward in episode {} = {}".format(completed_episodes, episode_reward))
 
-        if e % params['evaluation_frequency'] == 0:
+        if completed_episodes % params['evaluation_frequency'] == 0:
             if params['display_video']:
                     nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
             
@@ -917,7 +889,7 @@ def run_training(seed=0, verbose=True, **args):
 
             for _ in range(params['evaluation_episodes']):
 
-                nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, deterministic=deterministic)
+                nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False)
                 list_total_reward.append(total_reward)
                 average_duration += nb_steps
             
@@ -939,14 +911,19 @@ def run_training(seed=0, verbose=True, **args):
 
     env.close()
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]
+    
+    
+    
     return steps, results
 
 
 
 def main(**params):
 
-    steps, results = run_training(**params)
-    print("results:", results)
+    for n_agents in range(1,10):
+        params["n_agents"] = n_agents
+        steps, results = run_training(**params)
+        #print("results:", results)
     #print("Average total reward", total_reward / args.total_timesteps)
 
 

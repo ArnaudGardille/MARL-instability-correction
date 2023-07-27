@@ -51,12 +51,13 @@ class SimultaneousEnv(Env):
         self.reward_win = 1.0 # bonus_win*((n_actions+1)**(self.n_agents_to_defeat_ennemy))
         proba_others_attack = (1/n_actions**(n_agents-1))
         self.reward_death = -proba_others_attack*(1.0 - proba_others_attack)
+        #self.reward_death = -0.1
         self.common_reward = True
 
-        sa_observation_space = Space(None)
+        sa_observation_space = Discrete(1) #Space(None)
         self.observation_space = spaces.Tuple(tuple(n_agents * [sa_observation_space]))
 
-        sa_action_space = Discrete(n_actions+n_ennemies)
+        sa_action_space = Discrete(n_actions)
         self.action_space = spaces.Tuple(tuple(n_agents * [sa_action_space]))
 
         self.render_mode = None
@@ -66,14 +67,14 @@ class SimultaneousEnv(Env):
         
 
     def step(self, actions):
-        actions = np.array(actions)
+        actions = np.array(actions).reshape(-1)
         #for a in actions:
         attaquers = actions == 0
         nreward = np.zeros(self.n_agents)
         nreward[attaquers] = self.reward_win if np.sum(attaquers) >= self.n_agents_to_defeat_ennemy else self.reward_death
 
-        nobs = [None for _ in range(self.n_agents)]
-        ndone = [True for _ in range(self.n_agents)]
+        nobs = [[0.0] for _ in range(self.n_agents)]
+        ndone = [[True] for _ in range(self.n_agents)]
         ninfo = [None for _ in range(self.n_agents)]
 
         if self.common_reward:
@@ -82,7 +83,16 @@ class SimultaneousEnv(Env):
         return nobs, nreward, ndone, ninfo
     
     def reset(self):
-        return [None for _ in range(self.n_agents)]
+        return [[0.0] for _ in range(self.n_agents)]
+
+    def get_env_info(self):
+        return {
+            "n_actions": self.n_actions,
+            "n_agents": self.n_agents,
+            }
+
+    def get_avail_agent_actions(self, agent_id=None):
+        return np.ones(self.n_actions)
     
 if __name__ == "__main__":
     n_agents=3
