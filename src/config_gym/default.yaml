@@ -4,6 +4,8 @@ seed: 1
 torch_deterministic: True
 cuda: True
 track: False
+wandb_project_name: "Stabilizing MARL"
+wandb_entity:
 display_video: False
 capture_video: False
 save_model: True
@@ -29,19 +31,19 @@ num_envs: 1
 env_id: "water-bomber-v0"
 random_policy: False
 no_training: False
-total_timesteps: 100000
-learning_rate: 0.001
+total_timesteps: 20000
+learning_rate: 0.01
 buffer_size: 100000
 gamma: 0.99
 tau: 1.
-evaluation_frequency: 1000
-evaluation_episodes: 100
+evaluation_frequency: 10
+evaluation_episodes: 1
 target_network_frequency: 50
 batch_size:  1000 #2**18, #256, #
-start_e: 0.5
+start_e: 0.99
 end_e: 0.05
 exploration_fraction: 0.5
-learning_starts: 1000
+learning_starts: 100
 train_frequency: 100
 single_agent: False
 add_id: False

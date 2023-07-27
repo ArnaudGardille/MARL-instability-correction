@@ -50,6 +50,7 @@ class SimultaneousEnv(Env):
             self.n_agents_to_defeat_ennemy = n_agents_to_defeat_ennemy
         self.reward_win = 1.0 # bonus_win*((n_actions+1)**(self.n_agents_to_defeat_ennemy))
         proba_others_attack = (1/n_actions**(n_agents-1))
+        #self.reward_death = -n_actions/(1 - (1/n_actions**(n_agents-1))) if n_agents>1 else -0.1
         self.reward_death = -proba_others_attack*(1.0 - proba_others_attack)
         #self.reward_death = -0.1
         self.common_reward = True
@@ -64,6 +65,7 @@ class SimultaneousEnv(Env):
         self.reward_range = (self.reward_death, self.reward_win)
 
         print("reward_win:",self.reward_win)
+        print("reward_death:",self.reward_death)
         
 
     def step(self, actions):

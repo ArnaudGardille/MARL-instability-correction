@@ -10,6 +10,7 @@ import pickle
 import pandas as pd 
 import sys
 scale = 0.25   
+import wandb
 
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqnpy
 import argparse
@@ -69,7 +70,7 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="cleanRL",
+    parser.add_argument("--wandb-project-name", type=str, default=None,#"cleanRL",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
@@ -798,16 +799,16 @@ def run_training(seed=0, verbose=True, **args):
     if params['save_model']:
         os.makedirs(f"runs/{params['run_name']}/saved_models", exist_ok=True)
 
+    print("run_name", params['run_name'])
     if params['track']:
-        import wandb
-
-        run = wandb.init(
-            project=params['Stabilizing MARL'],
-            entity=params['wandb_entity'],
-            sync_tensorboard=True,
-            config=vars(args),
+        print("INIT:", params['run_name'])
+        wandb.init(
+            project=params['wandb_project_name'],
+            #entity=params['run_name'],
+            #sync_tensorboard=True,
+            config=params,
             name=params['run_name'],
-            monitor_gym=True,
+            #monitor_gym=True,
             save_code=True,
         )
     
@@ -898,7 +899,8 @@ def run_training(seed=0, verbose=True, **args):
 
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             writer.add_scalar("Average Return", average_return, completed_episodes)
-            run.log({
+            if params['track']:
+                wandb.log({
                         "Average Return":average_return, 
                         "Completed Episodes:":completed_episodes
                     })
@@ -927,6 +929,8 @@ def main(**params):
     for n_agents in range(1,10):
         params["n_agents"] = n_agents
         steps, results = run_training(**params)
+
+    wandb.finish()
         #print("results:", results)
     #print("Average total reward", total_reward / args.total_timesteps)
 
