@@ -155,7 +155,7 @@ brouillons/
 
 # pytype static type analyzer
 .pytype/
-#wandb/
+wandb/
 
 # Cython debug symbols
 cython_debug/
