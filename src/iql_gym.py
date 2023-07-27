@@ -1,4 +1,5 @@
 from water_bomber_env import WaterBomberEnv
+from simultaneous_env import SimultaneousEnv
 
 import random
 import yaml
@@ -224,7 +225,7 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     
 
 class QAgent():
-    def __init__(self, env, name, params, obs_shape, act_shape, writer):
+    def __init__(self, env, agent_id, params, obs_shape, act_shape, writer):
         for k, v in params.items():
             setattr(self, k, v)
 
@@ -236,9 +237,8 @@ class QAgent():
 
         self.env = env
 
-        self.agent_id  = int(name[-1])
-        self.name = str(name)
-        self.action_space = env.action_space(self.name)
+        self.agent_id  = agent_id
+        self.action_space = env.action_space(agent_id)
 
         if self.dueling:
             network_class=DuelingQNetwork
@@ -394,13 +394,13 @@ class QAgent():
 
                 sample = sample.to(self.device)
                 #action_mask = data.next_observations['action_mask']
-                normalized_obs = sample['observations'][self.name]['observation']
+                normalized_obs = sample['observations']
                 #normalized_obs = self.env.normalize_obs(observations).to(self.device)
-                action_mask = sample['observations'][self.name]['action_mask']
+                action_mask = sample['action_mask']
                 
-                normalized_next_obs = sample['next_observations'][self.name]['observation']
+                normalized_next_obs = sample['next_observations']
                 #normalized_next_obs = self.env.normalize_obs(next_observations).to(self.device)
-                next_action_mask = sample['next_observations'][self.name]['action_mask']
+                next_action_mask = sample['next_action_mask']
                 #assert next_observations[0][-2] == self.agent_id
                 assert torch.all(torch.sum(action_mask, 1) >0), (normalized_obs,action_mask)
                 assert torch.all(torch.sum(next_action_mask, 1) >0), action_mask
@@ -408,10 +408,10 @@ class QAgent():
                 with torch.no_grad():
                     target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
                     #print(sample['rewards'][self.name].shape, target_max.shape,  sample['dones'].shape)
-                    td_target = sample['rewards'][self.name].flatten() + self.gamma * target_max * (1 - sample['dones'][self.name].flatten())
+                    td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
                 #print(self.q_network(normalized_obs).shape, action_mask.shape, sample['actions'][self.name].shape)
                 #old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name].unsqueeze(0)).squeeze()
-                old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
+                old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
 
                 weights = torch.ones(self.batch_size).to(self.device)
                 
@@ -573,7 +573,7 @@ class QAgent():
         add_eps = "_eps" if self.add_epsilon else ""
         add_expl = "_expl" if self.add_others_explo else ""
 
-        path = Path.cwd() / 'rbs' / Path(self.name+env_type+add_eps+add_expl+'_replay_buffer.pickle')
+        path = Path.cwd() / 'rbs' / Path(self.agent_id+env_type+add_eps+add_expl+'_replay_buffer.pickle')
         with open(path, 'rb') as handle:
             data = pickle.load(handle)
 
@@ -581,16 +581,16 @@ class QAgent():
 
     def get_td_error(self, sample):
         sample = sample.to(self.device)
-        normalized_obs = sample['observations'][self.name]['observation']
-        action_mask = sample['observations'][self.name]['action_mask']
-        normalized_next_obs = sample['next_observations'][self.name]['observation']
-        next_action_mask = sample['next_observations'][self.name]['action_mask']
+        normalized_obs = sample['observation']
+        action_mask = sample['action_mask']
+        normalized_next_obs = sample['next_observations']
+        next_action_mask = sample['next_action_mask']
         
         with torch.no_grad():
             target_max, _ = (self.target_network(normalized_next_obs)*next_action_mask).max(dim=1)
             #print(sample['rewards'][self.name].shape, target_max.shape,  sample['dones'][self.name].shape)
-            td_target = sample['rewards'][self.name].flatten() + self.gamma * target_max * (1 - sample['dones'][self.name].flatten())
-            old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions'][self.name]).squeeze()
+            td_target = sample['rewards'].flatten() + self.gamma * target_max * (1 - sample['dones'].flatten())
+            old_val = (self.q_network(normalized_obs)*action_mask).gather(1, sample['actions']).squeeze()
 
             td_error = torch.abs(td_target-old_val)
         return td_error
@@ -671,11 +671,11 @@ class QAgent():
         current_likelyhood, past_likelyhood = torch.ones(self.batch_size), torch.ones(self.batch_size)
 
         for agent in self.env.possible_agents:
-            if agent != self.name:
+            if agent != self.agent_id:
                 sample = sample.cpu() #.to(self.device)
-                normalized_obs = sample['observations'][agent]['observation']
-                action_mask = sample['observations'][agent]['action_mask']
-                actions = sample['actions'][agent]
+                normalized_obs = sample['observations']
+                action_mask = sample['action_mask']
+                actions = sample['actions']
 
                 with torch.no_grad():
                         
@@ -691,7 +691,7 @@ class QAgent():
                         
                         #print("actions:", actions.shape)
                         #print("probabilities:", probabilities.shape)
-                        probability = probabilities.gather(1, sample['actions'][self.name]).squeeze()
+                        probability = probabilities.gather(1, sample['actions']).squeeze()
                         #print("probability:", probability.shape)
                         current_likelyhood *= probability
                     else:
@@ -728,97 +728,74 @@ class QAgent():
  
 
 
-def run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=False, verbose=False, deterministic=False):
-    if visualisation and params['save_imgs']:
-        obs, _ = env.reset(deterministic=deterministic) 
-
+def run_episode(env, n_agents, n_actions, completed_episodes, params, training=False, visualisation=False, verbose=False, deterministic=False):
+    if visualisation:
         for agent in env.agents:
             q_agents[agent].visualize_q_values(env, completed_episodes)
 
-    obs, _ = env.reset(deterministic=deterministic)
-    optimal_reward = env.compute_optimal_reward()
-
-    if verbose:
-        print('initial obs:', obs)
-
-    #episodic_returns = {}
-    episodic_return = 0.0
+    env.reset()
+    terminated = False
+    episode_reward = 0
     nb_steps = 0
 
-    while env.agents:
-        if visualisation:
-            env.render()
-            time.sleep(0.1)
-        
-        #if params['']use_state:
-        #    for a in env.agents:
-        #        obs[a]['observation'] = env.state()
+    epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
 
-        actions, probabilities = {}, {}
+    while not terminated:
+        n_obs = env.get_obs()
+        #state = env.get_state()
+        # env.render()  # Uncomment for rendering
 
-        epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
-        act_randomly = {agent: params['random_policy'] or (random.random() < epsilon and training) for agent in env.agents}
-        
+        actions = []
+        probabilities = []
+        act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(n_agents)]
 
-        for agent in env.agents:
-            other_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
-            act_randomly_list = list(other_act_randomly.values()) # NOT CLEAN
-            assert len(act_randomly_list) == env.num_agents - 1
-            avail_actions = obs[agent]['action_mask']
-
-            if act_randomly[agent]:
-                assert sum(avail_actions)>0, avail_actions
-
-                avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
-                action = torch.tensor([np.random.choice(avail_actions_ind)])
-                #print(avail_actions_ind, action)
+        for agent_id, obs in enumerate(n_obs):
+            avail_actions = env.get_avail_agent_actions(agent_id)
+            avail_actions_ind = np.nonzero(avail_actions)[0]
+            
+            other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
+            
+            if act_randomly[agent_id]:
+                action = np.random.choice(avail_actions_ind)
+                print("avail_actions", avail_actions)
                 probability = epsilon/sum(avail_actions)
             else:
-                action, probability = q_agents[agent].act(obs[agent], epsilon, act_randomly_list, training)
-            actions[agent] = action
-            probabilities[agent] = probability
+                action = q_agents[agent_id].act(obs)
+                probability = 1.0
 
-        #actions = {agent: np.random.choice(np.nonzero(obs[agent]['action_mask'])[0]) for agent in env.agents}  
-        #print("actions:", actions)
+            
+            
+            actions.append(action)
+            probabilities.append(probability)
+
+        n_reward, n_terminated, n_next_obs = env.step(actions)
+        episode_reward += np.mean(reward)
+
+
+        if training:
+            for agent_id, (obs, terminated, next_obs) in enumerate(zip(n_obs, n_terminated, n_next_obs)):
+                other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
+
+                q_agents[agent_id].add_to_rb(obs, other_act_randomly, actions, probabilities, rewards, next_obs, terminated, completed_episodes=completed_episodes)
+
+
         if verbose:
             print("actions:", actions)
             print("probabilities:", probabilities)
-        next_obs, rewards, terminations, truncations, infos = env.step(actions)
-        if verbose:
-            print("next_obs:", next_obs)
-            print("rewards:", rewards)
+            print("next_obs:", n_next_obs)
+            print("reward:", reward)
 
-        if training:
-        # On entraine pas, mais on complete quand meme le replay buffer
-            for agent in obs:
-                other_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
-                #q_ageother_act_randomly = {k:v for k,v in act_randomly.items() if k != agent}
-                act_randomly_list = list(other_act_randomly.values()) # NOT CLEANnts[agent].add_to_rb(obs[agent], actions[agent], rewards[agent], next_obs[agent], terminations[agent], truncations[agent], infos[agent])
-                q_agents[agent].add_to_rb(obs, act_randomly_list, actions, probabilities, rewards, next_obs, terminations, truncations, infos, completed_episodes=completed_episodes)
-
-        #episodic_returns = {k: rewards.get(k, 0) + episodic_returns.get(k, 0) for k in set(rewards) | set(episodic_returns)}
-        episodic_return += np.mean(list(rewards.values())) 
-
-        if visualisation and False:
-            print('Masks:', {a:obs[a]['action_mask'] for a in obs})
-            print('Actions:', actions)
-            print("Return:",episodic_return)
-
-        #assert episodic_return < 0.0
-        
         nb_steps += 1
-
         obs = next_obs
 
     if training:
         if params['single_agent']:
-            agent_0 = list(q_agents.values())[0]
-            agent_0.train(completed_episodes)
+            q_agents[0].train(completed_episodes)
         else:
-            for agent in q_agents.values():
+            for agent in q_agents:
                 agent.train(completed_episodes)
 
-    return nb_steps, episodic_return/optimal_reward #episodic_returns
+    return nb_steps, episodic_return #episodic_returns
     
 def run_training(seed=0, verbose=True, **args):
 
@@ -867,11 +844,12 @@ def run_training(seed=0, verbose=True, **args):
     torch.backends.cudnn.deterministic = params['torch_deterministic']
 
     ### Creating Env
-    env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
+    env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=10)
+    #WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
-    env.reset(deterministic=params['deterministic_env'])
+    env.reset()
 
     agent_0 = env.agents[0]
 
@@ -917,40 +895,42 @@ def run_training(seed=0, verbose=True, **args):
             q_agents[agent].replay_buffer = agent_0.replay_buffer
 
     #with contextlib.suppress(Exception):
-    results = []
     pbar=trange(params['total_timesteps'])
-    for completed_episodes in pbar:
+
+    env_info = env.get_env_info()
+
+    n_actions = env_info["n_actions"]
+    n_agents = env_info["n_agents"]
+        
+    results = []
+    for e in pbar:
         if not params['no_training']:
-            run_episode(env, q_agents, completed_episodes, params, training=True)
+            run_episode(env, n_agents, n_actions, completed_episodes, params, training=False, visualisation=False, verbose=False, deterministic=False)
+        print("Total reward in episode {} = {}".format(e, episode_reward))
 
-
-        if completed_episodes % params['evaluation_frequency'] == 0:
+        if e % params['evaluation_frequency'] == 0:
             if params['display_video']:
                     nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
             
-            determinims = [False] 
-            determinims += [True] if (params['x_max']==4 and params['y_max']==4 and params['t_max']==20 and params['n_agents']==2) else []
-            for deterministic in determinims:
-                list_total_reward = []
-                average_duration = 0.0
+            list_total_reward = []
+            average_duration = 0.0
 
-                for _ in range(params['evaluation_episodes']):
+            for _ in range(params['evaluation_episodes']):
 
-                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, deterministic=deterministic)
-                    list_total_reward.append(total_reward)
-                    average_duration += nb_steps
+                nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, deterministic=deterministic)
+                list_total_reward.append(total_reward)
+                average_duration += nb_steps
+            
+            average_duration /= params['evaluation_episodes']
+            average_return = np.mean(list_total_reward)
+
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            writer.add_scalar("Average Return", average_return, completed_episodes)
+            #writer.add_scalar("Average duration", average_duration, completed_episodes)
+            pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
+            results.append(average_return)
                 
-                average_duration /= params['evaluation_episodes']
-                average_return = np.mean(list_total_reward)
-
-                # TRY NOT TO MODIFY: record rewards for plotting purposes
-                decr = "Average return " + ("deterministic" if deterministic else "stochastic")
-                writer.add_scalar(decr, average_return, completed_episodes)
-                #writer.add_scalar("Average duration", average_duration, completed_episodes)
-                if not deterministic:
-                    pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
-                    results.append(average_return)
-                
+    env.close() 
 
     if params['save_buffer']:
         for agent in q_agents:
