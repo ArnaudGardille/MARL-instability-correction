@@ -1,4 +1,5 @@
-from iql import run_training
+#from iql import run_training
+from iql_gym import run_training
 import pandas as pd 
 import matplotlib.pyplot as plt
 import seaborn as sns

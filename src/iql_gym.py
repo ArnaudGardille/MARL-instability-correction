@@ -97,7 +97,7 @@ def parse_args():
     parser.add_argument("--x-max", type=int, default=4)
     parser.add_argument("--y-max", type=int, default=4)
     parser.add_argument("--t-max", type=int, default=10)
-    parser.add_argument("--n-agents", type=int, default=2)
+    parser.add_argument("--n-agents", type=int, default=5)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--num-envs", type=int, 
         help="the number of parallel game environments")
@@ -348,7 +348,7 @@ class QAgent():
         #    self.writer.add_scalar(str(self.agent_id)+"/epsilon", epsilon, completed_episodes)
         #    self.writer.add_scalar(str(self.agent_id)+"/action", action, completed_episodes)
 
-        return action
+        return float(action)
 
     def train(self, completed_episodes):
         # ALGO LOGIC: training.
@@ -472,8 +472,8 @@ class QAgent():
 
     def add_to_rb(self, obs, act_randomly, action, action_mask, probabilities, reward, next_obs, next_action_mask, terminated, truncated=False, infos=None, completed_episodes=0):
         #print("act_randomly:", act_randomly)
-        obs = deepcopy(obs)
-        next_obs = deepcopy(next_obs)
+        obs = torch.tensor(obs)
+        next_obs = torch.tensor(next_obs)
         action = deepcopy(action)
 
         if self.params['add_epsilon']:
@@ -733,13 +733,13 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
             else:
                 avail_actions = env.get_avail_agent_actions(agent_id)
 
-                action = q_agents[agent_id].act(obs, avail_actions)
+                action = q_agents[agent_id].act(obs, avail_actions, epsilon)
                 probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) if training else 1.0
 
             assert probability > 0.0 , (probability, epsilon)
             
             
-            actions.append(action)
+            actions.append(float(action))
             probabilities.append(probability)
 
         n_next_obs, n_reward, n_terminated, n_info = env.step(actions)

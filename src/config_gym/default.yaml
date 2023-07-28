@@ -2,7 +2,7 @@
 
 seed: 1
 torch_deterministic: True
-cuda: True
+cuda: False
 track: False
 wandb_project_name: "Stabilizing MARL"
 wandb_entity:
