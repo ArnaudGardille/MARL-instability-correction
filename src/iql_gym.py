@@ -918,8 +918,19 @@ def run_training(seed=0, verbose=True, **args):
     env.close()
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]
     
-    
-    
+    path = Path.cwd() / 'results'
+    results_dict = {
+            'Average optimality': results,
+            'Step': steps,
+        }
+    result_df = pd.DataFrame(results_dict)
+
+    os.makedirs(path / 'params', exist_ok=True)
+    with open(path/ 'params' / (params['run_name']+'.yaml'), 'w') as f:
+        yaml.dump(params, f, default_flow_style=False)
+    os.makedirs(path / 'df', exist_ok=True)
+    result_df.to_csv(path/ 'df' / (params['run_name']+'.csv'), index=False)
+
     return steps, results
 
 
