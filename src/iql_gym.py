@@ -11,7 +11,7 @@ import pandas as pd
 import sys
 scale = 0.25   
 import wandb
-
+from dict_hash import dict_hash
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqnpy
 import argparse
 import os
@@ -21,7 +21,7 @@ import time
 from distutils.util import strtobool
 from tqdm import trange
 from pprint import pprint
-
+from copy import copy
 import gymnasium as gym
 import numpy as np
 import torch
@@ -62,18 +62,12 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
-    parser.add_argument("--seed", type=int, default=0,
+    parser.add_argument("--seed", type=int,
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default=None,#"cleanRL",
-        help="the wandb's project name")
-    parser.add_argument("--wandb-entity", type=str, default=None,
-        help="the entity (team) of wandb's project")
     parser.add_argument("--display-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to show the video")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
@@ -103,8 +97,6 @@ def parse_args():
         help="the number of parallel game environments")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="water-bomber-v0",
-        help="the id of the environment")
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
     parser.add_argument("--load-buffer-from", type=str, default=None,
@@ -132,9 +124,9 @@ def parse_args():
         help="the batch size of sample from the reply memory")
     parser.add_argument("--start-e", type=float, 
         help="the starting epsilon for exploration")
-    parser.add_argument("--end-e", type=float, default=0.05,
+    parser.add_argument("--end-e", type=float, 
         help="the ending epsilon for exploration")
-    parser.add_argument("--exploration-fraction", type=float, default=0.5,
+    parser.add_argument("--exploration-fraction", type=float, 
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     parser.add_argument("--learning-starts", type=int, 
         help="timestep to start learning")
@@ -152,8 +144,8 @@ def parse_args():
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
+    parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'])
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'],
         help="whether to use a prioritized replay buffer.")
     #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
     parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -227,12 +219,13 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     
 
 class QAgent():
-    def __init__(self, env, agent_id, params, obs_shape, act_shape, writer):
+    def __init__(self, env, agent_id, params, obs_shape, act_shape, writer, experiment_hash=None):
         for k, v in params.items():
             setattr(self, k, v)
 
         self.params = params
         self.writer = writer
+        self.experiment_hash = experiment_hash
 
         self.device = torch.device("cuda" if torch.cuda.is_available() and params['cuda'] else "cpu")
         
@@ -456,10 +449,6 @@ class QAgent():
                     )
 
         
-
-        if self.upload_model:
-            self.upload_model()
-
     def compute_priorities(self, td_errors, eps=1e-8):
         td_errors = torch.maximum(td_errors, torch.ones(self.batch_size)*eps)
         return td_errors/td_errors.sum()
@@ -511,13 +500,13 @@ class QAgent():
 
 
     def save(self):
-
-        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.agent_id}.cleanrl_model")
+        model_path = Path.cwd() / 'runs' / self.experiment_hash / "{self.agent_id}.cleanrl_model"
+        os.makedirs("runs/"+self.experiment_hash+"/saved_models", exist_ok=True)
         torch.save(self.q_network.state_dict(), model_path)
         #print(f"model saved to {model_path}")
 
     def load(self, model_path):
-        model_path = Path.cwd() / 'runs' / Path(f"{self.params['run_name']}/saved_models/{self.agent_id}.cleanrl_model")
+        model_path = Path.cwd() / 'runs' / self.experiment_hash / "{self.agent_id}.cleanrl_model"
         self.q_network.load_state_dict(torch.load(model_path))
         print(f"model sucessfullt loaded from to {model_path}")
         
@@ -773,22 +762,34 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
     return nb_steps, episode_reward #episodic_returns
     
-def run_training(seed=0, verbose=True, **args):
+def run_training(verbose=True, **args):
 
     with open(Path('src/config_gym/default.yaml')) as f:
         params = yaml.safe_load(f)
+    path = Path.cwd() / 'results'
     
     for k, v in args.items():
         if v is not None:
+            #print('setting', k, 'to', v)
             params[k] = v
     #params.update(args)
     pprint(params)
+    old_params = copy(params)
 
-    if params['run_name'] is None:
-        params['run_name'] = f"iql_{int(time.time())}"
+    experiment_hash = str(dict_hash(params))
+
+    print("looking at", path/ (experiment_hash+'.csv'))
+    if os.path.isfile(path/ (experiment_hash+'.csv')):
+        print('readed')
+        assert False
+        results_df = pd.read_csv(path/ (experiment_hash+'.csv')) 
+        return results_df['Step'], results_df["Average optimality"]
+
+    #if params['run_name'] is None:
+    #    params['run_name'] = f"iql_{int(time.time())}"
     
 
-    writer = SummaryWriter(f"runs/{params['run_name']}")
+    writer = SummaryWriter(f"runs/"+experiment_hash)
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
@@ -796,27 +797,11 @@ def run_training(seed=0, verbose=True, **args):
     #writer.add_hparams(vars(args), {})
     writer.flush()
 
-    if params['save_model']:
-        os.makedirs(f"runs/{params['run_name']}/saved_models", exist_ok=True)
-
-    print("run_name", params['run_name'])
-    if params['track']:
-        print("INIT:", params['run_name'])
-        wandb.init(
-            project=params['wandb_project_name'],
-            #entity=params['run_name'],
-            #sync_tensorboard=True,
-            config=params,
-            name=params['run_name'],
-            #monitor_gym=True,
-            save_code=True,
-        )
-    
 
     # TRY NOT TO MODIFY: seeding
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    random.seed(params['seed'])
+    np.random.seed(params['seed'])
+    torch.manual_seed(params['seed'])
     torch.backends.cudnn.deterministic = params['torch_deterministic']
 
     ### Creating Env
@@ -849,15 +834,15 @@ def run_training(seed=0, verbose=True, **args):
     print("Size obs:", size_obs)
     ### Creating Agents
     
-    q_agents = [QAgent(env, a, params, size_obs, size_act, writer)  for a in range(env.n_agents)]
+    q_agents = [QAgent(env, a, params, size_obs, size_act, writer, experiment_hash)  for a in range(env.n_agents)]
     
     if params['load_agents_from'] is not None:
-        for name, agent in q_agents.items():
+        for name, agent in enumerate(q_agents):
             model_path = f"runs/{params['load_agents_from']}/saved_models/{name}.cleanrl_model"
             agent.load(model_path)
             
     if params['load_buffer_from'] is not None:
-        for name, agent in q_agents.items():
+        for name, agent in enumerate(q_agents):
             buffer_path = f"runs/{params['load_buffer_from']}/saved_models/{name}_buffer.pkl"
             agent.load_buffer(buffer_path)
 
@@ -918,7 +903,6 @@ def run_training(seed=0, verbose=True, **args):
     env.close()
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]
     
-    path = Path.cwd() / 'results'
     results_dict = {
             'Average optimality': results,
             'Step': steps,
@@ -926,11 +910,16 @@ def run_training(seed=0, verbose=True, **args):
     result_df = pd.DataFrame(results_dict)
 
     os.makedirs(path / 'params', exist_ok=True)
-    with open(path/ 'params' / (params['run_name']+'.yaml'), 'w') as f:
+    assert str(dict_hash(params)) == experiment_hash, params
+    with open(path/ 'params' / (experiment_hash+'.yaml'), 'w') as f:
         yaml.dump(params, f, default_flow_style=False)
-    os.makedirs(path / 'df', exist_ok=True)
-    result_df.to_csv(path/ 'df' / (params['run_name']+'.csv'), index=False)
 
+    result_df = result_df.assign(**params)
+    #os.makedirs(path / experiment_hash, exist_ok=True)
+    result_df.to_csv(path / (experiment_hash+'.csv'), index=False)
+
+    assert params == old_params, (params, old_params)
+    assert dict_hash(params) == dict_hash(old_params), (params, old_params)
     return steps, results
 
 

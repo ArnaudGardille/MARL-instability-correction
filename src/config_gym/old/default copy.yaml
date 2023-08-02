@@ -1,26 +1,34 @@
 # --- Defaults ---
 
-seed: 0
+seed: 1
 torch_deterministic: True
 cuda: False
 track: False
+wandb_project_name: "Stabilizing MARL"
+wandb_entity:
 display_video: False
 capture_video: False
 save_model: True
+upload_model: False
 use_state: False
 save_buffer: False
 load_buffer: False
 save_imgs: False
-run_name: 
+run_name:
 load_agents_from: 
 load_buffer_from: 
     
 
     # Environment specific arguments
+x_max: 4
+y_max: 4
+t_max: 10
 n_agents: 2
+env_normalization: True
+num_envs: 1
 
     # Algorithm specific arguments
-env_id: water-bomber-v0
+env_id: "water-bomber-v0"
 random_policy: False
 no_training: False
 total_timesteps: 20000
@@ -46,6 +54,5 @@ deterministic_env: False
 boltzmann_policy: False
 loss_corrected_for_others: False
 loss_not_corrected_for_priorisation: False
-prio: td_error #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='')
-rb: uniform # choices=['uniform', 'prioritized', 'laber'], default='uniform',
-
+prio: 'td_error' #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='')
+rb: 'uniform' # choices=['uniform', 'prioritized', 'laber'], default='uniform',
