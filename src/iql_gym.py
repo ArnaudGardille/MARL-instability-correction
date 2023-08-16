@@ -542,7 +542,7 @@ class QAgent():
 
     def get_td_error(self, sample):
         sample = sample.to(self.device)
-        obs = sample['observation']
+        obs = sample['observations']
         action_mask = sample['action_mask']
         next_obs = sample['next_observations']
         next_action_mask = sample['next_action_mask']
@@ -631,7 +631,7 @@ class QAgent():
     def current_and_past_others_actions_likelyhood(self, sample, completed_episodes):
         current_likelyhood, past_likelyhood = torch.ones(self.batch_size), torch.ones(self.batch_size)
 
-        for agent in self.env.possible_agents:
+        for agent in range(self.env.n_agents):
             if agent != self.agent_id:
                 sample = sample.cpu() #.to(self.device)
                 obs = sample['observations']
@@ -673,7 +673,7 @@ class QAgent():
                         probability = mask*(1.0-epsilon) + (1.0-mask)*epsilon/torch.sum(action_mask, 1)
                         current_likelyhood *= probability
                      
-                    past_likelyhood *= sample['actions_likelihood'][agent].squeeze()
+                    past_likelyhood *= sample['actions_likelihood'][:,agent].squeeze()
 
         #print("current_likelyhood:", current_likelyhood) #shape
         #print("past_likelyhood:", past_likelyhood)
