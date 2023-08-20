@@ -40,7 +40,7 @@ class SimultaneousEnv(Env):
     "name": "water-bomber-env_v0",
     }
 
-    def __init__(self, n_agents, n_actions, n_ennemies=1, bonus_win=0.1, n_agents_to_defeat_ennemy=None):
+    def __init__(self, n_agents, n_actions, n_ennemies=1, n_agents_to_defeat_ennemy=None):
         self.n_agents = n_agents
         self.n_actions = n_actions
         self.n_ennemy = n_ennemies
@@ -82,10 +82,10 @@ class SimultaneousEnv(Env):
         if self.common_reward:
             mean_reward = np.mean(nreward)
             nreward = [mean_reward for _ in range(self.n_agents)]
-        return nobs, nreward, ndone, ninfo
+        return nobs, nreward, ndone, [np.ones(self.n_actions) for _ in range(self.n_agents)]
     
     def reset(self):
-        return [[0.0] for _ in range(self.n_agents)]
+        return [[0.0] for _ in range(self.n_agents)], [np.ones(self.n_actions) for _ in range(self.n_agents)]
 
     def get_env_info(self):
         return {
@@ -93,8 +93,8 @@ class SimultaneousEnv(Env):
             "n_agents": self.n_agents,
             }
 
-    def get_avail_agent_actions(self, agent_id=None):
-        return np.ones(self.n_actions)
+    #def get_avail_agent_actions(self, agent_id=None):
+    #    return np.ones(self.n_actions)
     
 if __name__ == "__main__":
     n_agents=3
@@ -103,10 +103,10 @@ if __name__ == "__main__":
     #print("reward:", -1.0/((n_actions+1)**(n_agents-1)))
     total_rewards = np.zeros(n_agents)
     NB_STEPS = 100000
-    nobs = env.reset()
+    nobs, avail_act = env.reset()
     for _ in trange(NB_STEPS):
         actions = np.random.randint(n_actions, size=n_agents)
-        nobs, nreward, ndone, ninfo = env.step(actions)
+        nobs, nreward, ndone, avail_act = env.step(actions)
         #print(nreward)
         total_rewards += nreward
     print("Mean reward:", total_rewards/NB_STEPS)

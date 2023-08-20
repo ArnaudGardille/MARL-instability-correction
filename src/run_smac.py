@@ -1,4 +1,5 @@
-from iql import run_training
+#from iql import run_training
+from iql_gym import run_training
 import pandas as pd 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -8,6 +9,7 @@ import datetime
 from distutils.util import strtobool
 import argparse 
 import yaml
+from marllib import marl
 
 sns.set_theme(style="darkgrid")
 sns.set(rc={'figure.figsize':(11.7,8.27)})
@@ -24,7 +26,7 @@ def parse_args():
     parser.add_argument("--x-max", type=int)
     parser.add_argument("--y-max", type=int)
     parser.add_argument("--t-max", type=int)
-    parser.add_argument("--n-agents", type=int)
+    parser.add_argument("--n-agents", type=int, nargs="*")
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--num-envs", type=int,
         help="the number of parallel game environments")
@@ -79,6 +81,7 @@ def parse_args():
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*",)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], nargs="*",
         help="whether to use a prioritized replay buffer.")
+    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
@@ -125,7 +128,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 10
+NB_RUNS = 1
 
 modified_params = [None, None]
 

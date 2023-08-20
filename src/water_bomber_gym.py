@@ -37,53 +37,57 @@ class WaterBomberEnv(Env):
     self.X_MAX = x_max
     self.Y_MAX = y_max
     self.T_MAX = t_max
-    self.N_AGENTS = n_agents
+    self.n_agents = n_agents
 
-    self.players = [Player() for _ in range(n_agents)]
-    self.possible_agents = ["water_bomber_"+str(i) for i in range(n_agents)]
-    self.symbols = {"water_bomber_"+str(i):str(i) for i in range(n_agents)}
+    #self.players = [Player() for _ in range(n_agents)]
+    self.possible_agents = [i for i in range(n_agents)]
+    self.name_agents = ["water_bomber_"+str(i) for i in range(n_agents)]
+    self.symbols = {i:str(i) for i in range(n_agents)}
+    #{"water_bomber_"+str(i):str(i) for i in range(n_agents)}
     self.verbose = False
 
     self.add_id = add_id
-    self.length_id = self.N_AGENTS if add_id else 0
-    if self.add_id:
-      enc = OneHotEncoder(sparse_output=False).fit(np.array(self.possible_agents).reshape(-1, 1))
-      self.one_hot = {agent:enc.transform(np.array([agent]).reshape(-1, 1))[0] for agent in self.possible_agents}
-
+    self.length_id = self.n_agents if add_id else 0
+    #if self.add_id:
+      #enc = OneHotEncoder(sparse_output=False).fit(np.array(self.possible_agents).reshape(-1, 1))
+      #self.one_hot = {agent:enc.transform(np.array([agent]).reshape(-1, 1))[0] for agent in self.possible_agents}
+    self.one_hot = np.eye(n_agents)
 
   def reset(self, seed=None, options=None, deterministic=False):
     self.agents = copy(self.possible_agents)
 
     if deterministic:
-      assert self.X_MAX==4 and self.Y_MAX==4 and self.T_MAX==20 and self.N_AGENTS==2, (self.X_MAX==4, self.Y_MAX==4, self.T_MAX==20, self.N_AGENTS==2)
+      assert self.X_MAX==4 and self.Y_MAX==4 and self.T_MAX==20 and self.n_agents==2, (self.X_MAX==4, self.Y_MAX==4, self.T_MAX==20, self.n_agents==2)
       self.fires = [[2,3],[4,3]]
       self.water_bombers = {"water_bomber_0":[0,2],"water_bomber_1":[2,2]}
     else:
       points = {(randint(0, self.X_MAX), randint(0, self.Y_MAX))}
-      while len(points) < 2*self.N_AGENTS:
+      while len(points) < 2*self.n_agents:
         points |= {(randint(0, self.X_MAX), randint(0, self.Y_MAX))}
       list_pos = list(list(x) for x in points)
       
-      self.fires = list_pos[:self.N_AGENTS]
-      self.water_bombers = {"water_bomber_"+str(i):coor for i, coor in enumerate(list_pos[self.N_AGENTS:])}
+      self.fires = list_pos[:self.n_agents]
+      self.water_bombers = list_pos[self.n_agents:]
+      #self.water_bombers = {"water_bomber_"+str(i):coor for i, coor in enumerate(list_pos[self.n_agents:])}
 
-    self.has_finished = [False]*self.N_AGENTS
+    self.has_finished = [False]*self.n_agents
 
     self.timestep = 0
 
-    observations = self._generate_observations()
+    observations, action_masks = self._generate_observations()
 
     reward_opti = self.compute_optimal_reward()
     infos = {a: {'reward_opti':reward_opti} for a in self.agents}
 
-    return observations, infos
+    return observations, action_masks
 
   def step(self, actions):
-    for agent, action in actions.items():
+    for agent, action in enumerate(actions):
 
       x, y = self.water_bombers[agent]
 
-      occupied_positions = list(self.water_bombers.values())
+      occupied_positions = self.water_bombers
+      #list(self.water_bombers.values())
 
       if action == 0 and not [x,y+1] in occupied_positions:
         assert y<self.Y_MAX
@@ -103,23 +107,24 @@ class WaterBomberEnv(Env):
 
     self.has_finished = {a:self.water_bombers[a] in self.fires for a in self.agents}
 
-    rewards = {a: self._compute_reward() for a in self.agents}
+    rewards = [self._compute_reward() for a in self.agents]
+    #{a: self._compute_reward() for a in self.agents}
 
     self.timestep += 1
 
-    infos = {a: {} for a in self.agents}
+    infos = [{} for a in self.agents]
 
-    terminations = {a: False for a in self.agents}
+    terminations = [False for a in self.agents]
     #if np.all(self.has_finished):
     #  terminations = {a: True for a in self.agents}
       #self.agents = []
 
-    truncations = {a: False for a in self.agents}
-    observations = self._generate_observations()
+    truncations = [False for a in self.agents]
+    observations, action_masks = self._generate_observations()
     
     if self.timestep > self.T_MAX:
-      truncations = {a: True for a in self.agents}
-      self.agents = []
+      truncations = [True for a in self.agents]
+      #self.agents = []
 
     #self.agents = [a for a in self.agents if not (terminations[a] or truncations[a])]
     
@@ -131,7 +136,7 @@ class WaterBomberEnv(Env):
       print("terminations",terminations)
       print("truncations",truncations)
 
-    return observations, rewards, terminations, truncations, infos
+    return observations, rewards, truncations, action_masks
 
 
   def render(self):
@@ -139,7 +144,7 @@ class WaterBomberEnv(Env):
     for x, y in self.fires:
       grid[y, x] = "F"
 
-    for agent, (x, y) in self.water_bombers.items():
+    for agent, (x, y) in enumerate(self.water_bombers): #.items():
       grid[y, x] = self.symbols[agent]
 
     result = "\n".join(["".join([i for i in row]) for row in grid[::-1]])
@@ -148,13 +153,14 @@ class WaterBomberEnv(Env):
 
   @functools.lru_cache(maxsize=None)
   def observation_space(self, agent):
-    l = sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(2*self.N_AGENTS)]+[[self.T_MAX]], []) #
+    l = sum([[self.X_MAX+1, self.Y_MAX+1] for _ in range(2*self.n_agents)]+[[self.T_MAX]], []) #
     if self.add_id:
       l += self.length_id*[2]
-    return Dict({
-      'observation': MultiDiscrete(l), #+[13]
-      'action_mask': MultiBinary(5)
-    })
+    return  MultiDiscrete(l)
+    #return Dict({
+    #  'observation': MultiDiscrete(l), #+[13]
+    #  'action_mask': MultiBinary(5)
+    #})
 
   @functools.lru_cache(maxsize=None)
   def action_space(self, agent):
@@ -187,7 +193,8 @@ class WaterBomberEnv(Env):
     action_mask = np.ones(5)
     action_mask[-1] = 0
 
-    occupied_positions = list(self.water_bombers.values())
+    occupied_positions = self.water_bombers
+    #list(self.water_bombers.values())
     if y==self.Y_MAX or [x,y+1] in occupied_positions:
       action_mask[0] = 0
     if x==self.X_MAX or [x+1,y] in occupied_positions:
@@ -203,35 +210,40 @@ class WaterBomberEnv(Env):
     #assert sum(action_mask) > 0, (self.render(), action_mask, self.fires, occupied_positions, x, y)
     return action_mask
 
+  #def get_avail_agent_actions(self):
+
   def normalize_obs(self, obs):
     # ASSUMES ALL AGENTS HAVE SAME OBS SPACE
     normalized_obs = copy(obs)
 
     agent = self.possible_agents[0]
-    normalized_obs['observation'] = 2*normalized_obs['observation'].cpu()/(self.observation_space(agent)['observation'].nvec-1) - 1.0
-    normalized_obs['observation'] = normalized_obs['observation'].float()
-    assert sum(normalized_obs['action_mask']) > 0
-    return normalized_obs
+    normalized_obs = 2*normalized_obs.cpu()/(self.observation_space(agent).nvec-1) - 1.0
+    normalized_obs = normalized_obs.float()
+    #assert sum(normalized_obs['action_mask']) > 0
+    return normalized_#obs
 
   def _generate_observations(self):
-    action_masks = {}
+    action_masks = [] #{}
     for agent in self.agents:
       x, y = self.water_bombers[agent]
 
-      action_masks[agent] = self.get_action_mask(x,y)
+      action_masks.append(self.get_action_mask(x,y))
 
-    occupied_positions = list(self.water_bombers.values())
+    occupied_positions = self.water_bombers
+    #list(self.water_bombers.values())
 
     obs = sum(self.fires + occupied_positions +[[self.timestep]], []) #+[[self.timestep]]
-    observations = {}
+    observations = []
     for a in self.agents:
       obs_perso = np.concatenate((obs, self.one_hot[a])) if self.add_id else obs
-      observations[a] = {
+      observations.append(torch.tensor(obs_perso, dtype=torch.float))
+      action_masks[a] = torch.tensor(action_masks[a], dtype=torch.float)
+      """observations[a] = {
         "observation":torch.tensor(obs_perso, dtype=torch.float), #+ [self.timestep]
         "action_mask":torch.tensor(action_masks[a], dtype=torch.float)
-      }
+      }"""
 
-    return observations
+    return observations, action_masks
 
   def compute_optimal_reward(self):
     norm_1 = lambda x, y: np.linalg.norm(np.array(x, dtype=float)-np.array(y, dtype=float), ord=1)
@@ -241,26 +253,29 @@ class WaterBomberEnv(Env):
   def get_env_info(self):
     return {
       "n_actions": 4,
-      "n_agents": self.N_AGENTS,
+      "n_agents": self.n_agents,
     }
 
 def main_1():
   env = WaterBomberEnv(x_max=4, y_max=1, t_max=20, n_agents=2, add_id=True)
-  parallel_api_test(env, num_cycles=1_000_000)
-  observations, infos = env.reset(seed=42, deterministic=False, )
-  print('infos:', infos)
+  #parallel_api_test(env, num_cycles=1_000_000)
+  observations, action_masks = env.reset(seed=42, deterministic=False, )
+  print('action_masks:', action_masks)
   env.render()
   #print("observations initiale:", observations)
   total_reward = 0.0
-  while env.agents:
+  done = False
+  while not done:
     # this is where you would insert your policy
-    actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'])[0]) for agent in env.agents}  
+    #actions = {agent: np.random.choice(np.nonzero(observations[agent]['action_mask'])[0]) for agent in env.agents}  
+    #print(observations)
+    actions = [np.random.choice(np.nonzero(action_masks[agent])[0]) for agent in env.agents]
 
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
     #print("actions:",actions)
-    observations, rewards, terminations, truncations, infos = env.step(actions)
-    print(observations)
-    total_reward += np.mean(list(rewards.values())) 
+    observations, rewards, terminations, action_masks = env.step(actions)
+    done = np.all(np.array(terminations)==True)
+    total_reward += np.mean(rewards) 
     print("rewards:",rewards, "; total reward:", total_reward)
 
     env.render()

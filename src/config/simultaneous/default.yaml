@@ -17,7 +17,7 @@ load_buffer_from:
     
 
     # Environment specific arguments
-n_agents: 2
+n_agents: 4
 
     # Algorithm specific arguments
 env_id: water-bomber-v0
@@ -41,7 +41,7 @@ single_agent: False
 add_id: False
 add_epsilon: False
 add_others_explo: False
-dueling: True
+dueling: False
 deterministic_env: False
 boltzmann_policy: False
 loss_corrected_for_others: False

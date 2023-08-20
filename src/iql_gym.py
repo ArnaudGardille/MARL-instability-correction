@@ -1,4 +1,4 @@
-from water_bomber_env import WaterBomberEnv
+from water_bomber_gym import WaterBomberEnv
 from simultaneous_env import SimultaneousEnv
 
 import random
@@ -60,6 +60,8 @@ from torchrl.data import LazyTensorStorage, LazyMemmapStorage, ListStorage, Tens
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
+    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber'] ,default='simultaneous',
+        help="the id of the environment")
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
     parser.add_argument("--seed", type=int,
@@ -233,14 +235,18 @@ class QAgent():
         self.env = env
 
         self.agent_id  = agent_id
-        self.action_space = env.action_space[agent_id]
+        try:
+            self.action_space = env.action_space[agent_id]
+        except:
+            self.action_space = env.action_space(agent_id)
+
 
         if self.dueling:
             network_class=DuelingQNetwork
         else:
             network_class=QNetwork
 
-
+        #print("(obs_shape, act_shape)", (obs_shape, act_shape))
         self.q_network = network_class(obs_shape, act_shape).to(self.device)
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
         self.target_network = network_class(obs_shape, act_shape).to(self.device)
@@ -259,8 +265,7 @@ class QAgent():
             env.action_space(self.agent_id),
             self.device,handle_timeout_termination=False,
             )"""
-        self.rb_storage = LazyTensorStorage(self.buffer_size)
-        
+        self.rb_storage = LazyTensorStorage(self.buffer_size, device=self.device)
         if self.params['rb'] == 'prioritized':
             #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
             self.replay_buffer = TensorDictPrioritizedReplayBuffer(
@@ -331,10 +336,14 @@ class QAgent():
                 #print(action)
 
         #assert action in avail_actions_ind
-        avail_actions_ind = np.nonzero(avail_actions)[0].reshape(-1)
+        avail_actions = torch.tensor(avail_actions)
+        #print(avail_actions, np.nonzero(avail_actions))
+        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
 
         if int(action) not in avail_actions_ind:
             print(action, avail_actions_ind)
+            self.env.render()
+            
             action = torch.tensor([np.random.choice(avail_actions_ind)])
 
         #if completed_episodes % 1000 == 0:
@@ -461,19 +470,22 @@ class QAgent():
 
     def add_to_rb(self, obs, act_randomly, action, action_mask, probabilities, reward, next_obs, next_action_mask, terminated, truncated=False, infos=None, completed_episodes=0):
         #print("act_randomly:", act_randomly)
+        #print(obs)
         obs = torch.tensor(obs)
+        #print(next_obs)
         next_obs = torch.tensor(next_obs)
         action = deepcopy(action)
 
         if self.params['add_epsilon']:
-            for a in obs:
-                epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
-                obs = torch.cat((obs, torch.tensor([epsilon])), 0)
-                next_obs = torch.cat((next_obs, torch.tensor([epsilon])), 0)
+            #for a in obs:
+            epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps, completed_episodes)
+            obs = torch.cat((obs, torch.tensor([epsilon])), 0)
+            next_obs = torch.cat((next_obs, torch.tensor([epsilon])), 0)
         if self.params['add_others_explo']:
-            for a in obs:
-                obs = torch.cat((obs, torch.tensor(act_randomly)), 0)
-                next_obs = torch.cat((next_obs, torch.tensor(act_randomly)), 0)
+            #for a in obs:
+            #    print('a', a)
+            obs = torch.cat((obs, torch.tensor(act_randomly)), 0)
+            next_obs = torch.cat((next_obs, torch.tensor(act_randomly)), 0)
         
         
         #obs = self.env.normalize_obs(obs)
@@ -694,8 +706,9 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         for agent in q_agents:
             agent.visualize_q_values(env, completed_episodes)
 
-    n_obs = env.reset()
-    n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
+    n_obs, n_action_mask = env.reset()
+    #print("n_obs", n_obs)
+    #n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
     terminated = False
     episode_reward = 0
     nb_steps = 0
@@ -711,18 +724,20 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         probabilities = []
         act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
         for agent_id, obs in enumerate(n_obs):
-            avail_actions = env.get_avail_agent_actions(agent_id)
+            avail_actions = n_action_mask[agent_id]
+            #print("avail_actions", avail_actions)
+            #env.get_avail_agent_actions(agent_id)
             avail_actions_ind = np.nonzero(avail_actions)[0]
             
-            other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
+            other_act_randomly = torch.tensor(act_randomly[:agent_id]+act_randomly[agent_id+1:]).float()
             
             if act_randomly[agent_id]:
                 action = np.random.choice(avail_actions_ind).reshape(-1)
                 probability = epsilon/sum(avail_actions)
             else:
-                avail_actions = env.get_avail_agent_actions(agent_id)
-
-                action = q_agents[agent_id].act(obs, avail_actions, epsilon)
+                #avail_actions = env.get_avail_agent_actions(agent_id)
+                #print(other_act_randomly)
+                action = q_agents[agent_id].act(obs, avail_actions, epsilon, others_explo=other_act_randomly)
                 probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) if training else 1.0
 
             assert probability > 0.0 , (probability, epsilon)
@@ -731,14 +746,17 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
             actions.append(float(action))
             probabilities.append(probability)
 
-        n_next_obs, n_reward, n_terminated, n_info = env.step(actions)
+        n_next_obs, n_reward, n_terminated, n_action_mask = env.step(actions)
+        #print("n_reward", n_reward)
         episode_reward += np.mean(n_reward)
 
 
         if training:
+            #print(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs)
             for agent_id, (obs, terminated, action, avail_actions, reward, next_obs) in enumerate(zip(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs)):
                 other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
-                next_avail_actions = env.get_avail_agent_actions(agent_id)
+                next_avail_actions = n_action_mask[agent_id] # PB
+                #env.get_avail_agent_actions(agent_id)
                 q_agents[agent_id].add_to_rb(obs, other_act_randomly, action, avail_actions, probabilities, reward, next_obs, next_avail_actions, terminated, completed_episodes=completed_episodes)
 
 
@@ -750,7 +768,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
         nb_steps += 1
         n_obs = n_next_obs
-        n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
+        #n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
         terminated = n_terminated[0]
 
     if training:
@@ -762,11 +780,13 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
     return nb_steps, episode_reward #episodic_returns
     
-def run_training(verbose=True, **args):
+def run_training(env_id, verbose=True, path=None, **args):
 
-    with open(Path('src/config_gym/default.yaml')) as f:
+    with open(Path('src/config/'+env_id+'/default.yaml')) as f:
         params = yaml.safe_load(f)
-    path = Path.cwd() / 'results'
+    
+    if path is None:
+        path = Path.cwd() / 'results'
     
     for k, v in args.items():
         if v is not None:
@@ -778,18 +798,24 @@ def run_training(verbose=True, **args):
 
     experiment_hash = str(dict_hash(params))
 
-    print("looking at", path/ (experiment_hash+'.csv'))
-    if os.path.isfile(path/ (experiment_hash+'.csv')):
-        print('readed')
-        assert False
-        results_df = pd.read_csv(path/ (experiment_hash+'.csv')) 
-        return results_df['Step'], results_df["Average optimality"]
+    if env_id == 'simultaneous':
+        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=10)
+    elif env_id == 'water-bomber':
+        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
+    else:
+        raise NameError('Unknown env:'+env_id)
+    #print("looking at", path/ (experiment_hash+'.csv'))
+    #if os.path.isfile(path/ (experiment_hash+'.csv')):
+    #    print('readed')
+    #    assert False
+    #    results_df = pd.read_csv(path/ (experiment_hash+'.csv')) 
+    #    return results_df['Step'], results_df["Average optimality"]
 
     #if params['run_name'] is None:
     #    params['run_name'] = f"iql_{int(time.time())}"
     
 
-    writer = SummaryWriter(f"runs/"+experiment_hash)
+    writer = SummaryWriter(path/"runs")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
@@ -805,23 +831,31 @@ def run_training(verbose=True, **args):
     torch.backends.cudnn.deterministic = params['torch_deterministic']
 
     ### Creating Env
-    env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=10)
+    
+    #env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=10)
     #WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
     # env = dtype_v0(rps_v2.env(), np.float32)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
     env.reset()
 
-    obs_shape = env.observation_space[0].shape
+    try:
+        obs_shape = env.observation_space[0].shape
+    except:
+        obs_shape = env.observation_space(0).shape
+        
     size_obs = int(np.product(obs_shape))
     
-    size_act = int(env.action_space[0].n)
+    try:
+        size_act = int(env.action_space[0].n)
+    except:
+        size_act = int(env.action_space(0).n)
     
     if verbose:
         print('-'*20)
         print('num_agents: ',env.n_agents)
-        print('observation_space: ',env.observation_space[0])
-        print('action_space: ',env.action_space[0])
+        #print('observation_space: ',env.observation_space[0])
+        #print('action_space: ',env.action_space[0])
         #print('infos: ',env.infos)    
         print('size_obs: ',size_obs)    
         print('size_act: ',size_act)    
@@ -830,7 +864,7 @@ def run_training(verbose=True, **args):
     if params['add_epsilon']:
         size_obs += 1
     if params['add_others_explo']:
-        size_obs += env.num_agents - 1
+        size_obs += env.n_agents - 1
     print("Size obs:", size_obs)
     ### Creating Agents
     

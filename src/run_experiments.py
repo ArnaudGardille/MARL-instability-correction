@@ -25,13 +25,13 @@ def parse_args():
     parser.add_argument("--x-max", type=int)
     parser.add_argument("--y-max", type=int)
     parser.add_argument("--t-max", type=int)
-    parser.add_argument("--n-agents", type=int)
+    parser.add_argument("--n-agents", type=int, nargs="*")
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--num-envs", type=int,
         help="the number of parallel game environments")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str,
+    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber'] ,default='simultaneous',
         help="the id of the environment")
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
@@ -70,7 +70,7 @@ def parse_args():
         help="whether to add agents identity to observation")
     parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to add epsilon to observation")
-    parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
+    parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="*", 
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
@@ -81,6 +81,7 @@ def parse_args():
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], nargs="*",
         help="whether to use a prioritized replay buffer.")
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
@@ -127,7 +128,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 10
+NB_RUNS = 3
 
 modified_params = [None, None]
 
@@ -168,7 +169,9 @@ for run in range(NB_RUNS):
         #params_choice['evaluation_episodes'] = 2
 
         param_dict = {**params_choice, **params_const}
-        steps, avg_opti = run_training(run_name=run_name, seed=run, verbose=False, **param_dict)
+        
+        
+        steps, avg_opti = run_training(verbose=False, path=path, run_name=run_name, seed=run, **param_dict)
         n = len(avg_opti)
         
         results = {
