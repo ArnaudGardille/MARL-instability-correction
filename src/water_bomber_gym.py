@@ -76,8 +76,8 @@ class WaterBomberEnv(Env):
 
     observations, action_masks = self._generate_observations()
 
-    reward_opti = self.compute_optimal_reward()
-    infos = {a: {'reward_opti':reward_opti} for a in self.agents}
+    self.reward_opti = self.compute_optimal_reward()
+    #infos = {a: {'reward_opti':reward_opti} for a in self.agents}
 
     return observations, action_masks
 
@@ -179,7 +179,7 @@ class WaterBomberEnv(Env):
   def _compute_reward(self):
     #if self._is_terminated():
     if np.all([self.has_finished[a] for a in self.agents]):
-      return 1.0 #15.0
+      return 1.0/self.reward_opti #15.0
       #return 1.0-0.01*factorielle(self.timestep)
     else:
       return 0.0 #-1.0
@@ -220,7 +220,7 @@ class WaterBomberEnv(Env):
     normalized_obs = 2*normalized_obs.cpu()/(self.observation_space(agent).nvec-1) - 1.0
     normalized_obs = normalized_obs.float()
     #assert sum(normalized_obs['action_mask']) > 0
-    return normalized_#obs
+    return normalized_obs
 
   def _generate_observations(self):
     action_masks = [] #{}
@@ -276,6 +276,7 @@ def main_1():
     observations, rewards, terminations, action_masks = env.step(actions)
     done = np.all(np.array(terminations)==True)
     total_reward += np.mean(rewards) 
+    #print(actions, observations, rewards, terminations, action_masks)
     print("rewards:",rewards, "; total reward:", total_reward)
 
     env.render()

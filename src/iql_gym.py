@@ -341,8 +341,13 @@ class QAgent():
         avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
 
         if int(action) not in avail_actions_ind:
-            print(action, avail_actions_ind)
+            print("action", action)
+            print("avail_actions", avail_actions)
+            print("avail_actions_ind", avail_actions_ind)
+            print("obs", obs)
+            print("considered_q_values", considered_q_values)
             self.env.render()
+            assert False
             
             action = torch.tensor([np.random.choice(avail_actions_ind)])
 
@@ -757,6 +762,14 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
                 other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
                 next_avail_actions = n_action_mask[agent_id] # PB
                 #env.get_avail_agent_actions(agent_id)
+                if False:
+                    print("obs", obs)
+                    print("action", action)
+                    print("avail_actions", avail_actions)
+                    print("next_obs", next_obs)
+                    print("next_avail_actions", next_avail_actions)
+                    print("terminated", terminated)
+                    env.render()
                 q_agents[agent_id].add_to_rb(obs, other_act_randomly, action, avail_actions, probabilities, reward, next_obs, next_avail_actions, terminated, completed_episodes=completed_episodes)
 
 
