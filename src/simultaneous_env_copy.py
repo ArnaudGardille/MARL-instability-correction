@@ -51,7 +51,8 @@ class SimultaneousEnv(Env):
         self.reward_win = 1.0 # bonus_win*((n_actions+1)**(self.n_agents_to_defeat_ennemy))
         proba_others_attack = (1/n_actions**(n_agents-1))
         #self.reward_death = -n_actions/(1 - (1/n_actions**(n_agents-1))) if n_agents>1 else -0.1
-        self.reward_death = -proba_others_attack*(1.0 - proba_others_attack)
+        self.reward_death = -1.0/ (2**(n_agents-1) - 1)
+        #-proba_others_attack*(1.0 - proba_others_attack)
         #self.reward_death = -0.1
         self.common_reward = True
 
@@ -78,7 +79,6 @@ class SimultaneousEnv(Env):
         nobs = [[0.0] for _ in range(self.n_agents)]
         ndone = [[True] for _ in range(self.n_agents)]
         ninfo = [None for _ in range(self.n_agents)]
-
         if self.common_reward:
             mean_reward = np.mean(nreward)
             nreward = [mean_reward for _ in range(self.n_agents)]
@@ -97,7 +97,7 @@ class SimultaneousEnv(Env):
     #    return np.ones(self.n_actions)
     
 if __name__ == "__main__":
-    n_agents=5
+    n_agents=2
     n_actions=2
     env = SimultaneousEnv(n_agents=n_agents, n_actions=n_actions)
     #print("reward:", -1.0/((n_actions+1)**(n_agents-1)))
@@ -107,6 +107,10 @@ if __name__ == "__main__":
     for _ in trange(NB_STEPS):
         actions = np.random.randint(n_actions, size=n_agents)
         nobs, nreward, ndone, avail_act = env.step(actions)
-        #print(nreward)
+        #print("actions", actions)
+        #print("nreward", nreward)
+        if True:
+            print("actions", actions)
+            print("nreward", nreward)
         total_rewards += nreward
     print("Mean reward:", total_rewards/NB_STEPS)

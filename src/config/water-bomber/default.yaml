@@ -12,7 +12,6 @@ use_state: False
 save_buffer: False
 load_buffer: False
 save_imgs: False
-run_name:
 load_agents_from: 
 load_buffer_from: 
     

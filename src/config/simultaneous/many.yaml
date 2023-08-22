@@ -11,13 +11,14 @@ use_state: False
 save_buffer: False
 load_buffer: False
 save_imgs: False
+run_name: 
 load_agents_from: 
 load_buffer_from: 
     
 
     # Environment specific arguments
-n_agents: 4
-n_actions: 10
+n_agents: 10
+n_actions: 2
 
     # Algorithm specific arguments
 env_id: water-bomber-v0

@@ -780,7 +780,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
     return nb_steps, episode_reward #episodic_returns
     
-def run_training(env_id, verbose=True, path=None, **args):
+def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     with open(Path('src/config/'+env_id+'/default.yaml')) as f:
         params = yaml.safe_load(f)
@@ -796,10 +796,10 @@ def run_training(env_id, verbose=True, path=None, **args):
     pprint(params)
     old_params = copy(params)
 
-    experiment_hash = str(dict_hash(params))
+    #experiment_hash = str(dict_hash(params))
 
     if env_id == 'simultaneous':
-        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=10)
+        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
     elif env_id == 'water-bomber':
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
     else:
@@ -815,7 +815,7 @@ def run_training(env_id, verbose=True, path=None, **args):
     #    params['run_name'] = f"iql_{int(time.time())}"
     
 
-    writer = SummaryWriter(path/"runs")
+    writer = SummaryWriter(path/"runs"/run_name)
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
@@ -868,7 +868,7 @@ def run_training(env_id, verbose=True, path=None, **args):
     print("Size obs:", size_obs)
     ### Creating Agents
     
-    q_agents = [QAgent(env, a, params, size_obs, size_act, writer, experiment_hash)  for a in range(env.n_agents)]
+    q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
     
     if params['load_agents_from'] is not None:
         for name, agent in enumerate(q_agents):
@@ -943,14 +943,14 @@ def run_training(env_id, verbose=True, path=None, **args):
         }
     result_df = pd.DataFrame(results_dict)
 
-    os.makedirs(path / 'params', exist_ok=True)
-    assert str(dict_hash(params)) == experiment_hash, params
-    with open(path/ 'params' / (experiment_hash+'.yaml'), 'w') as f:
+    os.makedirs(path / run_name, exist_ok=True)
+    #assert str(dict_hash(params)) == experiment_hash, params
+    with open(path/ run_name/'params.yaml', 'w') as f:
         yaml.dump(params, f, default_flow_style=False)
 
     result_df = result_df.assign(**params)
     #os.makedirs(path / experiment_hash, exist_ok=True)
-    result_df.to_csv(path / (experiment_hash+'.csv'), index=False)
+    result_df.to_csv(path / run_name / 'results.csv', index=False)
 
     assert params == old_params, (params, old_params)
     assert dict_hash(params) == dict_hash(old_params), (params, old_params)
@@ -962,6 +962,7 @@ def main(**params):
 
     for n_agents in range(1,10):
         params["n_agents"] = n_agents
+        params["run_name"] = str(n_agents)
         steps, results = run_training(**params)
 
     wandb.finish()
