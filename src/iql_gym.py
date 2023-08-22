@@ -90,9 +90,9 @@ def parse_args():
     
 
     # Environment specific arguments
-    parser.add_argument("--x-max", type=int, default=4)
-    parser.add_argument("--y-max", type=int, default=4)
-    parser.add_argument("--t-max", type=int, default=10)
+    parser.add_argument("--x-max", type=int)
+    parser.add_argument("--y-max", type=int)
+    parser.add_argument("--t-max", type=int)
     parser.add_argument("--n-agents", type=int)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--num-envs", type=int, 
