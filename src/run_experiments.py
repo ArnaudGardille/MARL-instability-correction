@@ -64,7 +64,7 @@ def parse_args():
         help="timestep to start learning")
     parser.add_argument("--train-frequency", type=int, nargs="*",
         help="the frequency of training")
-    parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
+    parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), nargs="*", 
         help="whether to use a single network for all agents. Identity is the added to observation")
     parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to add agents identity to observation")
@@ -203,7 +203,7 @@ results_df.to_csv(path/ 'eval_prio.csv', index=False)
 
 sns.lineplot(x="Step", y="Average optimality",
              hue=modified_params[0], style=modified_params[1],
-             data=results_df)
+             data=results_df, errorbar=('ci', 90))
 
 plt.savefig(path/'eval_prio.svg', format='svg')
 #plt.show()

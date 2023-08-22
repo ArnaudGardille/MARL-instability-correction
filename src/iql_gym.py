@@ -93,7 +93,7 @@ def parse_args():
     parser.add_argument("--x-max", type=int, default=4)
     parser.add_argument("--y-max", type=int, default=4)
     parser.add_argument("--t-max", type=int, default=10)
-    parser.add_argument("--n-agents", type=int, default=5)
+    parser.add_argument("--n-agents", type=int)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--num-envs", type=int, 
         help="the number of parallel game environments")
@@ -882,7 +882,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     if params['single_agent']:
         agent_0 = q_agents[0]
-        for agent in q_agents:
+        for agent in range(env.n_agents):
             q_agents[agent].q_network = agent_0.q_network
             q_agents[agent].replay_buffer = agent_0.replay_buffer
 
@@ -960,10 +960,11 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
 def main(**params):
 
-    for n_agents in range(1,10):
-        params["n_agents"] = n_agents
-        params["run_name"] = str(n_agents)
-        steps, results = run_training(**params)
+    #for n_agents in range(1,10):
+    #params["n_agents"] = n_agents
+    #params["run_name"] = str(n_agents)
+    params["run_name"] = "test"
+    steps, results = run_training(**params)
 
     wandb.finish()
         #print("results:", results)
