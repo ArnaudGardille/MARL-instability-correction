@@ -93,6 +93,8 @@ class SimultaneousEnv(Env):
             "n_agents": self.n_agents,
             }
 
+    def normalize_obs(self, obs):
+        return obs
     #def get_avail_agent_actions(self, agent_id=None):
     #    return np.ones(self.n_actions)
     

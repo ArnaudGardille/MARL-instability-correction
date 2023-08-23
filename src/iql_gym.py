@@ -386,13 +386,13 @@ class QAgent():
                 sample = sample.to(self.device)
                 #action_mask = data.next_observations['action_mask']
                 obs = sample['observations']
-                if self.params['env_normalization']:
-                    obs = self.env.normalize_obs(obs).to(self.device)
+                #if self.params['env_normalization']:
+                #    obs = self.env.normalize_obs(obs).to(self.device)
                 action_mask = sample['action_mask']
                 
                 next_obs = sample['next_observations']
-                if self.params['env_normalization']:
-                    next_obs = self.env.normalize_obs(next_obs).to(self.device)
+                #if self.params['env_normalization']:
+                #    next_obs = self.env.normalize_obs(next_obs).to(self.device)
                 next_action_mask = sample['next_action_mask']
                 #assert next_observations[0][-2] == self.agent_id
                 assert torch.all(torch.sum(action_mask, 1) >0), (obs,action_mask)
@@ -495,11 +495,13 @@ class QAgent():
             next_obs = torch.cat((next_obs, torch.tensor(act_randomly)), 0)
         
         
-        #obs = self.env.normalize_obs(obs)
         for a in obs:
             assert sum(action_mask) > 0 
             assert sum(next_action_mask) > 0 
-        #next_obs = self.env.normalize_obs(next_obs)
+                
+        if self.params['env_normalization']:
+            obs = self.env.normalize_obs(obs)
+            next_obs = self.env.normalize_obs(next_obs)
 
         transition = {
             'observations':torch.tensor(obs, dtype=torch.float32).reshape(-1),
