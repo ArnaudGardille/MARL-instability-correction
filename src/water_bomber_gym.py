@@ -114,7 +114,7 @@ class WaterBomberEnv(Env):
 
     infos = [{} for a in self.agents]
 
-    terminations = [False for a in self.agents]
+    #terminations = [False for a in self.agents]
     #if np.all(self.has_finished):
     #  terminations = {a: True for a in self.agents}
       #self.agents = []
@@ -133,7 +133,7 @@ class WaterBomberEnv(Env):
       print()
       print("observations",observations)
       print("rewards",rewards)
-      print("terminations",terminations)
+      #print("terminations",terminations)
       print("truncations",truncations)
 
     return observations, rewards, truncations, action_masks
@@ -183,6 +183,9 @@ class WaterBomberEnv(Env):
       #return 1.0-0.01*factorielle(self.timestep)
     else:
       return 0.0 #-1.0
+
+  def get_action_mask_from_id(self, agent_id):
+    return self.get_action_mask(*self.water_bombers[agent_id])
 
   def get_action_mask(self, x, y):
     #x, y = self.water_bombers[]
@@ -261,7 +264,7 @@ def main_1():
   #parallel_api_test(env, num_cycles=1_000_000)
   observations, action_masks = env.reset(seed=42, deterministic=False, )
   print('action_masks:', action_masks)
-  env.render()
+  #env.render()
   #print("observations initiale:", observations)
   total_reward = 0.0
   done = False
@@ -273,13 +276,20 @@ def main_1():
 
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
     #print("actions:",actions)
+    env.render()
+    print("actions", actions)
     observations, rewards, terminations, action_masks = env.step(actions)
+    print("observations", observations)
+    print("rewards", rewards)
+    print("terminations", terminations)
+    print("action_masks", action_masks)
+    print()
     done = np.all(np.array(terminations)==True)
     total_reward += np.mean(rewards) 
     #print(actions, observations, rewards, terminations, action_masks)
-    print("rewards:",rewards, "; total reward:", total_reward)
+    #print("rewards:",rewards, "; total reward:", total_reward)
 
-    env.render()
+    #env.render()
     time.sleep(0.1)
   env.close()
 
