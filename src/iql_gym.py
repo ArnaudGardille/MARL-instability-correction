@@ -70,8 +70,6 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--display-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="whether to show the video")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -996,7 +994,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         #print("Total reward in episode {} = {}".format(completed_episodes, episode_reward))
 
         if completed_episodes % params['evaluation_frequency'] == 0:
-            if params['display_video']:
+            if params['save_imgs']:
                     nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
             
             list_total_reward = []

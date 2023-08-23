@@ -58,9 +58,13 @@ class WaterBomberEnv(Env):
 
   def reset(self, seed=None, options=None, deterministic=False):
     self.agents = copy(self.possible_agents)
+    
+    if self.deterministic and not (self.X_MAX==4 and self.Y_MAX==2 and self.T_MAX==20 and self.n_agents==2):
+        print("env cannot be deterministic")
+        self.deterministic = False
 
     if self.deterministic or deterministic:
-      assert self.X_MAX==4 and self.Y_MAX==2 and self.T_MAX==20 and self.n_agents==2, (self.X_MAX==4, self.Y_MAX==4, self.T_MAX==20, self.n_agents==2)
+      assert self.X_MAX==4 and self.Y_MAX==2 and self.T_MAX==20 and self.n_agents==2
       self.fires = [[2,1],[4,1]]
       self.water_bombers = [[0,0],[2,0]]
     else:

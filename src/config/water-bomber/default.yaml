@@ -4,8 +4,6 @@ seed: 0
 torch_deterministic: True
 cuda: False
 track: False
-display_video: False
-capture_video: False
 save_model: True
 upload_model: False
 use_state: False
@@ -28,9 +26,9 @@ num_envs: 1
 env_id: "water-bomber"
 random_policy: False
 no_training: False
-total_timesteps: 20000
+total_timesteps: 50000
 learning_rate: 0.01
-buffer_size: 100000
+buffer_size: 1000000
 gamma: 0.9
 tau: 1.
 evaluation_frequency: 1000
