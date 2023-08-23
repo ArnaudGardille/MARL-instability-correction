@@ -9,6 +9,7 @@ import datetime
 from distutils.util import strtobool
 import argparse 
 import yaml
+from marllib import marl
 
 sns.set_theme(style="darkgrid")
 sns.set(rc={'figure.figsize':(11.7,8.27)})
@@ -31,7 +32,7 @@ def parse_args():
         help="the number of parallel game environments")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber'] ,default='simultaneous',
+    parser.add_argument("--env-id", type=str,
         help="the id of the environment")
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
@@ -64,21 +65,18 @@ def parse_args():
         help="timestep to start learning")
     parser.add_argument("--train-frequency", type=int, nargs="*",
         help="the frequency of training")
-    parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), nargs="*", 
+    parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to use a single network for all agents. Identity is the added to observation")
     parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to add agents identity to observation")
-    #parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", help="whether to add epsilon to observation")
-    parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , nargs="*", help="whether to add epsilon to observation")
-    #parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="*", 
+    parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
+        help="whether to add epsilon to observation")
+    parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     #parser.add_argument("--loss-corrected-for", choices=['others', 'priorisation'], nargs="*")
-    #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
-    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")
+    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*",)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], nargs="*",
@@ -130,7 +128,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 3
+NB_RUNS = 1
 
 modified_params = [None, None]
 
@@ -171,9 +169,7 @@ for run in range(NB_RUNS):
         #params_choice['evaluation_episodes'] = 2
 
         param_dict = {**params_choice, **params_const}
-        
-        
-        steps, avg_opti = run_training(verbose=False, path=path, run_name=run_name, seed=run, **param_dict)
+        steps, avg_opti = run_training(run_name=run_name, seed=run, verbose=False, **param_dict)
         n = len(avg_opti)
         
         results = {
@@ -205,7 +201,7 @@ results_df.to_csv(path/ 'eval_prio.csv', index=False)
 
 sns.lineplot(x="Step", y="Average optimality",
              hue=modified_params[0], style=modified_params[1],
-             data=results_df, errorbar=('ci', 90))
+             data=results_df)
 
 plt.savefig(path/'eval_prio.svg', format='svg')
 #plt.show()

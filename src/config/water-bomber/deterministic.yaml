@@ -1,10 +1,10 @@
 # --- Defaults ---
 
-seed: 1
+seed: 0
 torch_deterministic: True
 cuda: False
 track: False
-display_video: False
+display-v-function: False
 capture_video: False
 save_model: True
 upload_model: False
@@ -12,37 +12,36 @@ use_state: False
 save_buffer: False
 load_buffer: False
 save_imgs: False
-run_name:
 load_agents_from: 
 load_buffer_from: 
     
 
     # Environment specific arguments
 x_max: 4
-y_max: 4
-t_max: 10
+y_max: 2
+t_max: 20
 n_agents: 2
 env_normalization: True
 num_envs: 1
 
     # Algorithm specific arguments
-env_id: "water-bomber-v0"
+env_id: "water-bomber"
 random_policy: False
 no_training: False
-total_timesteps: 1000
-learning_rate: 0.001
-buffer_size: 10000
-gamma: 0.99
+total_timesteps: 20000
+learning_rate: 0.01
+buffer_size: 100000
+gamma: 0.9
 tau: 1.
-evaluation_frequency: 100
-evaluation_episodes: 10
-target_network_frequency: 200
-batch_size:  100 #2**18, #256, #
-start_e: 1
+evaluation_frequency: 1000
+evaluation_episodes: 100
+target_network_frequency: 100
+batch_size:  1000 #2**18, #256, #
+start_e: 0.99
 end_e: 0.05
-exploration_fraction: 0.5
-learning_starts: 100
-train_frequency: 100
+exploration_fraction: 0.8
+learning_starts: 1000
+train_frequency: 5
 single_agent: False
 add_id: False
 add_epsilon: False
