@@ -68,19 +68,21 @@ def parse_args():
         help="whether to use a single network for all agents. Identity is the added to observation")
     parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to add agents identity to observation")
-    parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
-        help="whether to add epsilon to observation")
+    #parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", help="whether to add epsilon to observation")
+    parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , nargs="*", help="whether to add epsilon to observation")
+    #parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="*")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="*", 
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     #parser.add_argument("--loss-corrected-for", choices=['others', 'priorisation'], nargs="*")
-    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
+    #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
+    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*",)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], nargs="*",
         help="whether to use a prioritized replay buffer.")
-    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     
     args = parser.parse_args()
     # fmt: on
