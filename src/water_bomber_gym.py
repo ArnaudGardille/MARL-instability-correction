@@ -32,12 +32,15 @@ class WaterBomberEnv(Env):
     "name": "water-bomber-env_v0",
   }
 
-  def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, add_id=False):
+  def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, add_id=False, obs_normalization=True, deterministic=False, gamma=0.9):
 
     self.X_MAX = x_max
     self.Y_MAX = y_max
     self.T_MAX = t_max
     self.n_agents = n_agents
+    self.obs_normalization = obs_normalization
+    self.deterministic = deterministic
+    self.gamma=gamma
 
     #self.players = [Player() for _ in range(n_agents)]
     self.possible_agents = [i for i in range(n_agents)]
@@ -56,10 +59,10 @@ class WaterBomberEnv(Env):
   def reset(self, seed=None, options=None, deterministic=False):
     self.agents = copy(self.possible_agents)
 
-    if deterministic:
-      assert self.X_MAX==4 and self.Y_MAX==4 and self.T_MAX==20 and self.n_agents==2, (self.X_MAX==4, self.Y_MAX==4, self.T_MAX==20, self.n_agents==2)
-      self.fires = [[2,3],[4,3]]
-      self.water_bombers = {"water_bomber_0":[0,2],"water_bomber_1":[2,2]}
+    if self.deterministic or deterministic:
+      assert self.X_MAX==4 and self.Y_MAX==2 and self.T_MAX==20 and self.n_agents==2, (self.X_MAX==4, self.Y_MAX==4, self.T_MAX==20, self.n_agents==2)
+      self.fires = [[2,1],[4,1]]
+      self.water_bombers = [[0,0],[2,0]]
     else:
       points = {(randint(0, self.X_MAX), randint(0, self.Y_MAX))}
       while len(points) < 2*self.n_agents:
@@ -225,8 +228,9 @@ class WaterBomberEnv(Env):
     #assert sum(normalized_obs['action_mask']) > 0
     return normalized_obs
 
-  def _generate_observations(self):
+  def get_state_and_action_masks(self):
     action_masks = [] #{}
+
     for agent in self.agents:
       x, y = self.water_bombers[agent]
 
@@ -235,11 +239,19 @@ class WaterBomberEnv(Env):
     occupied_positions = self.water_bombers
     #list(self.water_bombers.values())
 
-    obs = sum(self.fires + occupied_positions +[[self.timestep]], []) #+[[self.timestep]]
+    state = sum(self.fires + occupied_positions +[[self.timestep]], [])
+    return state, action_masks
+
+  def _generate_observations(self):
+     #+[[self.timestep]]
+    state, action_masks = self.get_state_and_action_masks()
     observations = []
     for a in self.agents:
-      obs_perso = np.concatenate((obs, self.one_hot[a])) if self.add_id else obs
-      observations.append(torch.tensor(obs_perso, dtype=torch.float))
+      obs_perso = np.concatenate((state, self.one_hot[a])) if self.add_id else state
+      obs_perso = torch.tensor(obs_perso, dtype=torch.float)
+      if self.obs_normalization:
+        obs_perso = self.normalize_obs(obs_perso)
+      observations.append(obs_perso)
       action_masks[a] = torch.tensor(action_masks[a], dtype=torch.float)
       """observations[a] = {
         "observation":torch.tensor(obs_perso, dtype=torch.float), #+ [self.timestep]
@@ -252,6 +264,10 @@ class WaterBomberEnv(Env):
     norm_1 = lambda x, y: np.linalg.norm(np.array(x, dtype=float)-np.array(y, dtype=float), ord=1)
     duree_min = min([max([norm_1(self.water_bombers[a],f) for f in self.fires]) for a in self.agents])
     return self.T_MAX - duree_min + 2.0
+    #return (1-self.gamma**(N))/(1-self.gamma)
+
+  def get_state(self):
+    return self.get_state_and_action_masks()[0]
 
   def get_env_info(self):
     return {

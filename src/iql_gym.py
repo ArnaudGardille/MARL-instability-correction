@@ -499,9 +499,9 @@ class QAgent():
             assert sum(action_mask) > 0 
             assert sum(next_action_mask) > 0 
                 
-        if self.params['env_normalization']:
+        """if self.params['env_normalization']:
             obs = self.env.normalize_obs(obs)
-            next_obs = self.env.normalize_obs(next_obs)
+            next_obs = self.env.normalize_obs(next_obs)"""
 
         transition = {
             'observations':torch.tensor(obs, dtype=torch.float32).reshape(-1),
@@ -514,8 +514,9 @@ class QAgent():
             'dones':torch.tensor(terminated, dtype=torch.float32).reshape(-1),
             #'td': 1.0#{a:1.0 for a in obs}
         }
-        
-        #print('transition:', transition)
+        #self.env.render()
+        #print('transition:')
+        #pprint(transition)
         transition = TensorDict(transition,batch_size=[])
         self.replay_buffer.add(transition)
 
@@ -580,11 +581,10 @@ class QAgent():
     def visualize_q_values(self, env, completed_episodes):
         arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-        observation, _ = env.reset()
-        observation = observation[self.agent_id] #['observation']
+        observations, action_mask = env.reset()
+        obs = observations[self.agent_id] #['observation']
         #observation['observation'][-1] = 5
         #assert observation[-2] == self.agent_id
-
         q_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
         if self.dueling:
             v_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
@@ -597,11 +597,12 @@ class QAgent():
                 #print(observation)
 
                 action_mask= env.get_action_mask(x,y)
-                obs = self.env.normalize_obs(observation)
+                #obs = self.env.normalize_obs(observation)
                 #print('obs:', obs)
-                obs = TensorDict(obs, batch_size=[]).to(self.device)
+                #obs = TensorDict(obs, batch_size=[]).to(self.device)
+                obs = torch.tensor(obs).to(self.device)
                 #print(self.q_network(observation).detach().cpu()*action_mask)
-                pred = self.q_network(obs['observation']).detach().cpu()
+                pred = self.q_network(obs).detach().cpu()
                 target = pred + (action_mask-1)*9999.0
                 #target = torch.argmax(considered_q_values).numpy()
 
@@ -611,7 +612,7 @@ class QAgent():
                 target_argmax = target.argmax()
 
                 if self.dueling:
-                    v_values[ x, y] = self.q_network(obs['observation'], value_only=True).detach().cpu()
+                    v_values[ x, y] = self.q_network(obs, value_only=True).detach().cpu()
 
                 #clipped_target_max = (np.clip(target_max, -10, 10) + 10)/ 20
                 #q_values[0, x, y] = clipped_target_max 
@@ -633,7 +634,7 @@ class QAgent():
         for x in range(env.X_MAX+1):
             for y in range(env.Y_MAX+1):
                 if choosen_act[x,y] != 4:
-                    plt.arrow(x, 4-y, scale*arrows[choosen_act[x,y]][0], scale*arrows[choosen_act[x,y]][1], head_width=0.1)
+                    plt.arrow(x, env.Y_MAX-y, scale*arrows[choosen_act[x,y]][0], scale*arrows[choosen_act[x,y]][1], head_width=0.1)
 
         self.writer.add_figure(str(self.agent_id)+"/q*_values_imgs", fig, completed_episodes)
 
@@ -644,7 +645,7 @@ class QAgent():
             fig.colorbar(im, ax=ax, label='Interactive colorbar')
 
             self.writer.add_figure(str(self.agent_id)+"/v_values_imgs", fig, completed_episodes)
-        
+ 
     def importance_weight(self, sample, completed_episodes):
         num, denom = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
         return (num/denom).to(self.device)
@@ -704,25 +705,88 @@ class QAgent():
                     
                         
 
+    
+def visualize_trajectory(env, agents, completed_episodes):
+    arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-                
+    n_obs, n_action_mask = env.reset(deterministic=True)
+    states = [env.get_state()[:-1]]
 
- 
+    q_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
+    choosen_act = np.full((env.X_MAX+1, env.Y_MAX+1), 4,  dtype=int)
+    terminated = False
+    while not terminated:
+        actions = []
+        for agent_id, obs in enumerate(n_obs):
+
+            x, y = env.water_bombers[agent_id]
+            action_mask = n_action_mask[agent_id]
+            
+            other_act_randomly = torch.zeros(env.n_agents - 1)
+            
+            obs = torch.tensor(obs).to(agents[agent_id].device)
+            #print(self.q_network(observation).detach().cpu()*action_mask)
+            pred = agents[agent_id].q_network(obs).detach().cpu()
+            target = pred + (action_mask-1)*9999.0
+            #target = torch.argmax(considered_q_values).numpy()
+
+            #assert np.all(target >= 0)
+            target_max = target.max().float()
+
+            target_argmax = target.argmax()
+
+
+            #clipped_target_max = (np.clip(target_max, -10, 10) + 10)/ 20
+            #q_values[0, x, y] = clipped_target_max 
+            #q_values[1, x, y] = 1.0 - clipped_target_max
+            q_values[ x, y] = target_max
+
+            choosen_act[ x, y] = target_argmax
+            actions.append(target_argmax)
+
+        n_previous_action_mask = n_action_mask
+        n_next_obs, n_reward, n_terminated, n_action_mask = env.step(actions)
+
+        n_obs = n_next_obs
+        #n_previous_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
+        state = env.get_state()[:-1]
+        #print(n_terminated[0], state, states)
+        terminated = n_terminated[0] or (state in states)
+        states.append(state)
+
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(q_values.T[::-1])
+
+    fig.colorbar(im, ax=ax, label='Interactive colorbar')
+
+
+    #self.writer.add_image(str(self.agent_id)+"/q_values_imgs", q_values, completed_episodes)
+
+
+    #fig, ax = plt.subplots(figsize=(6, 6))
+    for x in range(env.X_MAX+1):
+        for y in range(env.Y_MAX+1):
+            if choosen_act[x,y] != 4:
+                plt.arrow(x, env.Y_MAX-y, scale*arrows[choosen_act[x,y]][0], scale*arrows[choosen_act[x,y]][1], head_width=0.1) #, color=
+
+    agents[0].writer.add_figure("q_values_imgs", fig, completed_episodes)
 
 
 def run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=False, verbose=False):
     if visualisation:
-        for agent in q_agents:
-            agent.visualize_q_values(env, completed_episodes)
+        visualize_trajectory(env, q_agents, completed_episodes)
+        #for agent in q_agents:
+        #    agent.visualize_q_values(env, completed_episodes)
 
     n_obs, n_action_mask = env.reset()
     #print("n_obs", n_obs)
-    #n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
+    #n_previous_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
     terminated = False
     episode_reward = 0
     nb_steps = 0
-    n_next_action_mask = n_action_mask
-
+    #n_action_mask = n_previous_action_mask
+    n_previous_action_mask = None
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
 
     while not terminated:
@@ -757,29 +821,29 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
             probabilities.append(probability)
 
         if False:
-            print("n_action_mask", n_action_mask)
+            print("n_previous_action_mask", n_previous_action_mask)
             print("actions", actions)
             env.render()
 
-        n_action_mask = n_next_action_mask
+        n_previous_action_mask = n_action_mask
         n_next_obs, n_reward, n_terminated, n_action_mask = env.step(actions)
         if False:
             print("n_next_obs", n_next_obs)
             print("n_reward", n_reward)
             print("n_terminated", n_terminated)
-            print("n_next_action_mask", n_next_action_mask)
+            print("n_action_mask", n_action_mask)
             print()
         #print("n_reward", n_reward)
         episode_reward += np.mean(n_reward)
 
 
         if training:
-            #print(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs)
-            for agent_id, (obs, terminated, action, avail_actions, reward, next_obs, next_avail_actions) in enumerate(zip(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs, n_next_action_mask)):
+            #print(n_obs, n_terminated, actions, n_previous_action_mask, n_reward, n_next_obs)
+            for agent_id, (obs, terminated, action, avail_actions, reward, next_obs, next_avail_actions) in enumerate(zip(n_obs, n_terminated, actions, n_previous_action_mask, n_reward, n_next_obs, n_action_mask)):
                 other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
                 #next_avail_actions = env.get_action_mask_from_id(agent_id=agent_id)
-                #next_avail_actions = n_next_action_mask[agent_id]
-                #n_action_mask[agent_id] # PB
+                #next_avail_actions = n_action_mask[agent_id]
+                #n_previous_action_mask[agent_id] # PB
                 #env.get_avail_agent_actions(agent_id)
                 if False:
                     print("obs", obs)
@@ -799,7 +863,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
 
         nb_steps += 1
         n_obs = n_next_obs
-        #n_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
+        #n_previous_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
         terminated = n_terminated[0]
 
     if training:
@@ -832,7 +896,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     if env_id == 'simultaneous':
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
     elif env_id == 'water-bomber':
-        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
+        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'])
     else:
         raise NameError('Unknown env:'+env_id)
     #print("looking at", path/ (experiment_hash+'.csv'))

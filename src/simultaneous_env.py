@@ -40,7 +40,7 @@ class SimultaneousEnv(Env):
     "name": "water-bomber-env_v0",
     }
 
-    def __init__(self, n_agents, n_actions, n_ennemies=1, n_agents_to_defeat_ennemy=None):
+    def __init__(self, n_agents, n_actions, n_ennemies=1, n_agents_to_defeat_ennemy=None, obs_normalization=None):
         self.n_agents = n_agents
         self.n_actions = n_actions
         self.n_ennemy = n_ennemies

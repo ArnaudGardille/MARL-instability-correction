@@ -4,7 +4,7 @@ seed: 0
 torch_deterministic: True
 cuda: False
 track: False
-display_video: False
+display-v-function: False
 capture_video: False
 save_model: True
 upload_model: False
