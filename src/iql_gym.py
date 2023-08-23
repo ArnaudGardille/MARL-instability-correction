@@ -341,8 +341,13 @@ class QAgent():
         avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
 
         if int(action) not in avail_actions_ind:
-            print(action, avail_actions_ind)
+            print("action", action)
+            print("avail_actions", avail_actions)
+            print("avail_actions_ind", avail_actions_ind)
+            print("obs", obs)
+            print("considered_q_values", considered_q_values)
             self.env.render()
+            #assert False
             
             action = torch.tensor([np.random.choice(avail_actions_ind)])
 
@@ -381,11 +386,13 @@ class QAgent():
                 sample = sample.to(self.device)
                 #action_mask = data.next_observations['action_mask']
                 obs = sample['observations']
-                #obs = self.env.normalize_obs(observations).to(self.device)
+                if self.params['env_normalization']:
+                    obs = self.env.normalize_obs(obs).to(self.device)
                 action_mask = sample['action_mask']
                 
                 next_obs = sample['next_observations']
-                #next_obs = self.env.normalize_obs(next_observations).to(self.device)
+                if self.params['env_normalization']:
+                    next_obs = self.env.normalize_obs(next_obs).to(self.device)
                 next_action_mask = sample['next_action_mask']
                 #assert next_observations[0][-2] == self.agent_id
                 assert torch.all(torch.sum(action_mask, 1) >0), (obs,action_mask)
@@ -712,6 +719,7 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
     terminated = False
     episode_reward = 0
     nb_steps = 0
+    n_next_action_mask = n_action_mask
 
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
 
@@ -746,17 +754,38 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
             actions.append(float(action))
             probabilities.append(probability)
 
+        if False:
+            print("n_action_mask", n_action_mask)
+            print("actions", actions)
+            env.render()
+
+        n_action_mask = n_next_action_mask
         n_next_obs, n_reward, n_terminated, n_action_mask = env.step(actions)
+        if False:
+            print("n_next_obs", n_next_obs)
+            print("n_reward", n_reward)
+            print("n_terminated", n_terminated)
+            print("n_next_action_mask", n_next_action_mask)
+            print()
         #print("n_reward", n_reward)
         episode_reward += np.mean(n_reward)
 
 
         if training:
             #print(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs)
-            for agent_id, (obs, terminated, action, avail_actions, reward, next_obs) in enumerate(zip(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs)):
+            for agent_id, (obs, terminated, action, avail_actions, reward, next_obs, next_avail_actions) in enumerate(zip(n_obs, n_terminated, actions, n_action_mask, n_reward, n_next_obs, n_next_action_mask)):
                 other_act_randomly = act_randomly[:agent_id]+act_randomly[agent_id+1:]
-                next_avail_actions = n_action_mask[agent_id] # PB
+                #next_avail_actions = env.get_action_mask_from_id(agent_id=agent_id)
+                #next_avail_actions = n_next_action_mask[agent_id]
+                #n_action_mask[agent_id] # PB
                 #env.get_avail_agent_actions(agent_id)
+                if False:
+                    print("obs", obs)
+                    print("action", action)
+                    print("avail_actions", avail_actions)
+                    print("next_obs", next_obs)
+                    print("next_avail_actions", next_avail_actions)
+                    print("terminated", terminated)
                 q_agents[agent_id].add_to_rb(obs, other_act_randomly, action, avail_actions, probabilities, reward, next_obs, next_avail_actions, terminated, completed_episodes=completed_episodes)
 
 

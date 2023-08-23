@@ -130,7 +130,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 10
+NB_RUNS = 1
 
 modified_params = [None, None]
 

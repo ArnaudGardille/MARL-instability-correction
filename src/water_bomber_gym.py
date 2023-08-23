@@ -76,8 +76,8 @@ class WaterBomberEnv(Env):
 
     observations, action_masks = self._generate_observations()
 
-    reward_opti = self.compute_optimal_reward()
-    infos = {a: {'reward_opti':reward_opti} for a in self.agents}
+    self.reward_opti = self.compute_optimal_reward()
+    #infos = {a: {'reward_opti':reward_opti} for a in self.agents}
 
     return observations, action_masks
 
@@ -114,7 +114,7 @@ class WaterBomberEnv(Env):
 
     infos = [{} for a in self.agents]
 
-    terminations = [False for a in self.agents]
+    #terminations = [False for a in self.agents]
     #if np.all(self.has_finished):
     #  terminations = {a: True for a in self.agents}
       #self.agents = []
@@ -133,7 +133,7 @@ class WaterBomberEnv(Env):
       print()
       print("observations",observations)
       print("rewards",rewards)
-      print("terminations",terminations)
+      #print("terminations",terminations)
       print("truncations",truncations)
 
     return observations, rewards, truncations, action_masks
@@ -179,10 +179,13 @@ class WaterBomberEnv(Env):
   def _compute_reward(self):
     #if self._is_terminated():
     if np.all([self.has_finished[a] for a in self.agents]):
-      return 1.0 #15.0
+      return 1.0/self.reward_opti #15.0
       #return 1.0-0.01*factorielle(self.timestep)
     else:
       return 0.0 #-1.0
+
+  def get_action_mask_from_id(self, agent_id):
+    return self.get_action_mask(*self.water_bombers[agent_id])
 
   def get_action_mask(self, x, y):
     #x, y = self.water_bombers[]
@@ -220,7 +223,7 @@ class WaterBomberEnv(Env):
     normalized_obs = 2*normalized_obs.cpu()/(self.observation_space(agent).nvec-1) - 1.0
     normalized_obs = normalized_obs.float()
     #assert sum(normalized_obs['action_mask']) > 0
-    return normalized_#obs
+    return normalized_obs
 
   def _generate_observations(self):
     action_masks = [] #{}
@@ -261,7 +264,7 @@ def main_1():
   #parallel_api_test(env, num_cycles=1_000_000)
   observations, action_masks = env.reset(seed=42, deterministic=False, )
   print('action_masks:', action_masks)
-  env.render()
+  #env.render()
   #print("observations initiale:", observations)
   total_reward = 0.0
   done = False
@@ -273,12 +276,20 @@ def main_1():
 
     #actions = {agent: env.action_space(agent).sample() for agent in env.agents}  
     #print("actions:",actions)
+    env.render()
+    print("actions", actions)
     observations, rewards, terminations, action_masks = env.step(actions)
+    print("observations", observations)
+    print("rewards", rewards)
+    print("terminations", terminations)
+    print("action_masks", action_masks)
+    print()
     done = np.all(np.array(terminations)==True)
     total_reward += np.mean(rewards) 
-    print("rewards:",rewards, "; total reward:", total_reward)
+    #print(actions, observations, rewards, terminations, action_masks)
+    #print("rewards:",rewards, "; total reward:", total_reward)
 
-    env.render()
+    #env.render()
     time.sleep(0.1)
   env.close()
 

@@ -1,8 +1,8 @@
 # --- Defaults ---
 
-seed: 1
+seed: 0
 torch_deterministic: True
-cuda: True
+cuda: False
 track: False
 display_video: False
 capture_video: False
@@ -18,7 +18,7 @@ load_buffer_from:
 
     # Environment specific arguments
 x_max: 4
-y_max: 4
+y_max: 2
 t_max: 20
 n_agents: 2
 env_normalization: True
@@ -29,7 +29,7 @@ env_id: "water-bomber"
 random_policy: False
 no_training: False
 total_timesteps: 200000
-learning_rate: 0.001
+learning_rate: 0.0001
 buffer_size: 1000000
 gamma: 0.99
 tau: 1.
