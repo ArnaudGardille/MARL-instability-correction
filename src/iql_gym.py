@@ -980,7 +980,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             q_agents[agent].replay_buffer = agent_0.replay_buffer
 
     #with contextlib.suppress(Exception):
-    pbar=trange(params['total_timesteps'])
 
     env_info = env.get_env_info()
 
@@ -988,6 +987,10 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     n_agents = env_info["n_agents"]
         
     results = []
+    if __name__ == "__main__":
+        pbar=trange(params['total_timesteps'])
+    else:
+        pbar=range(params['total_timesteps'])
     for completed_episodes in pbar:
         if not params['no_training']:
             run_episode(env, q_agents, completed_episodes, params, training=True, visualisation=False, verbose=False)
@@ -1017,7 +1020,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
                         "Completed Episodes:":completed_episodes
                     })
             #writer.add_scalar("Average duration", average_duration, completed_episodes)
-            pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
+            if __name__ == "__main__":
+                pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
             results.append(average_return)
                 
     env.close() 

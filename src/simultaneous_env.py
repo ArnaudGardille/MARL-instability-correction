@@ -13,19 +13,6 @@ import time
 from enum import Enum
 from tqdm import trange
 
-#from gym.envs.registration import registry, register, make, spec
-from gymnasium.envs.registration import registry, register, make, spec
-
-register(
-    id="Simultaneous-v1",                     # Environment ID.
-    entry_point="src.simultaneous_env:SimultaneousEnv",  # The entry point for the environment class
-    kwargs={
-                "n_agents":2, 
-                "n_actions":10, 
-                "n_ennemies":1, 
-                "n_agents_to_defeat_ennemy":None                                   # Arguments that go to ForagingEnv's __init__ function.
-            },
-)
 
 #gymkey = f"Simultaneous-{n_agent}ag-{n_actions}empty-{bonus_win}bonus_win-v0"
 

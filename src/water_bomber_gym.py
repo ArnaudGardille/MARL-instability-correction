@@ -29,7 +29,7 @@ class CellEntity(Enum):
 
 class WaterBomberEnv(Env):
   metadata = {
-    "name": "water-bomber-env_v0",
+    "name": "water-bomber-v1",
   }
 
   def __init__(self, x_max=4, y_max=4, t_max=20, n_agents=2, add_id=False, obs_normalization=True, deterministic=False, gamma=0.9):

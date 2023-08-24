@@ -3,6 +3,7 @@ from iql_gym import run_training
 import pandas as pd 
 import matplotlib.pyplot as plt
 import seaborn as sns
+from tqdm import trange
 from pathlib import Path
 import os 
 import datetime
@@ -130,7 +131,7 @@ NAMES = {
     "loss-not-corrected-for-prioritized":"",
 }
 
-NB_RUNS = 3
+NB_RUNS = 100
 
 modified_params = [None, None]
 
@@ -155,7 +156,8 @@ path = Path.cwd() / 'results' / experiment_name
 os.makedirs(path, exist_ok=True)
 
 results_df = []
-for run in range(NB_RUNS):
+pbar = trange(NB_RUNS)
+for run in pbar:
     #print('params_list_choices_dicts:', params_list_choices_dicts)
 
     for params_choice in params_list_choices_dicts:
@@ -166,6 +168,8 @@ for run in range(NB_RUNS):
             run_name += str(k)+':'+str(params_choice[k]) + "/"
         run_name += str(run)
         print("Run name:", run_name)
+        pbar.set_description("Run name: "+run_name) #, Duration={average_duration:5.1f}"
+
         #params['prio'] = prio
         #params_choice['total_timesteps'] = 10
         #params_choice['evaluation_episodes'] = 2
