@@ -26,7 +26,8 @@ def parse_args():
     parser.add_argument("--y-max", type=int)
     parser.add_argument("--t-max", type=int)
     parser.add_argument("--n-agents", type=int, nargs="*")
-    parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
+    parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="*")
+    #parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--num-envs", type=int,
         help="the number of parallel game environments")
 
