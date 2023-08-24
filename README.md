@@ -10,3 +10,4 @@
  --add-epsilon True False --add-others-explo True False
  --single-agent True False  --env-id water-bomber 
  --loss-corrected-for-others True False --env-id water-bomber 
+  python src/run_experiments.py
