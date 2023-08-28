@@ -449,9 +449,9 @@ class QAgent():
 
                 if self.loss_correction_for_others != 'none':
                     others_correction = sample[self.loss_correction_for_others]
-                    if args.sqrt_correction:
+                    if self.sqrt_correction:
                         others_correction = np.sqrt(others_correction)
-                    if args.clip_correction_after is not None:
+                    if self.clip_correction_after is not None:
                         others_correction = np.clip(others_correction, -args.clip_correction_after, args.clip_correction_after)
                     weights *= others_correction
                     #self.importance_weight(sample, completed_episodes)
