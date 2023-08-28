@@ -87,7 +87,7 @@ def parse_args():
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--loss_correction_for_others", choices=[None, 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], nargs="?",
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], nargs="*",
         help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
     # fmt: on
@@ -160,8 +160,8 @@ path = Path.cwd() / 'results' / experiment_name
 os.makedirs(path, exist_ok=True)
 
 results_df = []
-pbar = trange(NB_RUNS)
-for run in pbar:
+for run in range(NB_RUNS):
+    print("Run", run)
     #print('params_list_choices_dicts:', params_list_choices_dicts)
 
     for params_choice in params_list_choices_dicts:
@@ -172,7 +172,7 @@ for run in pbar:
             run_name += str(k)+':'+str(params_choice[k]) + "/"
         run_name += str(run)
         print("Run name:", run_name)
-        pbar.set_description("Run name: "+run_name) #, Duration={average_duration:5.1f}"
+        #pbar.set_description("Run name: "+run_name) #, Duration={average_duration:5.1f}"
 
         #params['prio'] = prio
         #params_choice['total_timesteps'] = 10
