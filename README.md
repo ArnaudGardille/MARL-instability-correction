@@ -13,3 +13,11 @@ tensorboard --logdir=/home/nono/Documents/Dassault/Water-Bomber-Env/results/runs
  --single-agent True False  --env-id water-bomber 
  --loss-corrected-for-others True False --env-id water-bomber 
   python src/run_experiments.py
+
+
+
+  --loss-correction-for-others none td_error td-past td-cur-past td-cur cur-past cur -rb laber 
+  --loss-correction-for-others none td_error td-past td-cur-past td-cur cur-past cur -rb laber  --sqrt-correction
+  --rb uniform prioritized laber likely
+  --loss-correction-for-others td-past --clip-correction-after
+

@@ -142,11 +142,13 @@ def parse_args():
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'])
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'],
-        help="whether to use a prioritized replay buffer.")
+    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'])
+    parser.add_argument("--loss-correction-for-others", choices=[None, 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
+    parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], default='uniform')
     #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
     parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -159,8 +161,8 @@ def parse_args():
 
 
 
-def weighted_mse_loss(input, target, weight):
-    return (weight * (input - target) ** 2).mean()
+def weighted_mse_loss(predicted, target, weight):
+    return (weight * (predicted - target) ** 2).mean()
 
 # ALGO LOGIC: initialize agent here:
 class QNetwork(nn.Module): #QNetworkSimpleMLP
@@ -216,12 +218,21 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     slope = (end_e - start_e) / duration
     return max(slope * t + start_e, end_e)
 
-    
+
+def get_n_likeliest(batch, key, n):
+    descending = batch[key].sort(dim=0, descending=True)
+    descending = batch[key] >= descending.values[n]
+    descending = descending.reshape(-1)
+    descending &= torch.cumsum(descending, 0) <= n
+    return batch[descending]
 
 class QAgent():
     def __init__(self, env, agent_id, params, obs_shape, act_shape, writer, experiment_hash=None):
         for k, v in params.items():
-            setattr(self, k, v)
+            if k=='none':
+                setattr(self, None, v)
+            else:
+                setattr(self, k, v)
 
         self.params = params
         self.writer = writer
@@ -264,7 +275,17 @@ class QAgent():
             self.device,handle_timeout_termination=False,
             )"""
         self.rb_storage = LazyTensorStorage(self.buffer_size, device=self.device)
-        if self.params['rb'] == 'prioritized':
+        if self.params['rb'] == 'uniform':
+            self.replay_buffer = TensorDictReplayBuffer(
+                #self.replay_buffer = TensorDictReplayBuffer(
+                #storage=ListStorage(self.buffer_size),
+                storage=self.rb_storage,
+                #collate_fn=lambda x: x, 
+                #priority_key="td_error",
+                batch_size=self.batch_size,
+            )
+
+        elif self.params['rb'] == 'prioritized':
             #sampler = PrioritizedSampler(max_capacity=self.buffer_size, alpha=0.8, beta=1.1)
             self.replay_buffer = TensorDictPrioritizedReplayBuffer(
                 alpha = 1.0,#0.7,
@@ -277,17 +298,19 @@ class QAgent():
             )
             
         else:
+
             self.replay_buffer = TensorDictReplayBuffer(
-                #self.replay_buffer = TensorDictReplayBuffer(
-                #storage=ListStorage(self.buffer_size),
-                storage=self.rb_storage,
-                #collate_fn=lambda x: x, 
-                #priority_key="td_error",
-                batch_size=self.batch_size,
-            )
-            #print("prio: ", self.prio)
+                    #self.replay_buffer = TensorDictReplayBuffer(
+                    #storage=ListStorage(self.buffer_size),
+                    storage=self.rb_storage,
+                    #collate_fn=lambda x: x, 
+                    #priority_key="td_error",
+                    batch_size=4*self.batch_size,
+                )
+            
+
             if self.params['rb'] =='laber':
-                self.smaller_buffer_size = self.batch_size*4
+                self.smaller_buffer_size = 4*self.batch_size
 
                 self.smaller_buffer = TensorDictPrioritizedReplayBuffer(
                     alpha = 1.0, #0.7,
@@ -297,7 +320,13 @@ class QAgent():
                     storage=LazyTensorStorage(self.smaller_buffer_size),
                     #collate_fn=lambda x: x, 
                     batch_size=self.batch_size,
-            )
+                )
+
+            """else:
+                self.replay_buffer = self.smaller_buffer 
+                assert self.replay_buffer is self.smaller_buffer """
+            #print("prio: ", self.prio)
+            
         
         if self.params['load_buffer']:
             self.load_rb()
@@ -360,24 +389,27 @@ class QAgent():
         if completed_episodes > self.learning_starts:
             #print("mod: ", (completed_episodes + 100*self.agent_id ) % self.train_frequency)
             if completed_episodes % self.train_frequency == 0:
-                if self.params['rb'] =='laber':
+                if (self.params['rb'] =='laber') or (self.params['rb'] =='likely'):
                     # On met a jour les TD errors 
-                    for _ in range(4): #(self.smaller_buffer_size // self.buffer_size)+1):
-                        sample = self.replay_buffer.sample().to(self.device)
-                        
-                        td_error = self.get_td_error(sample)
-                        current_likelyhood, past_likelyhood = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
-                        current_likelyhood, past_likelyhood = current_likelyhood.to(self.device) , past_likelyhood.to(self.device) 
+                    #for _ in range(4): #(self.smaller_buffer_size // self.buffer_size)+1):
+                    sample = self.replay_buffer.sample()
+                    
+                    td_error = self.get_td_error(sample).to('cpu')
+                    current_likelyhood, past_likelyhood = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
+                    #current_likelyhood, past_likelyhood = current_likelyhood.to(self.device) , past_likelyhood.to(self.device) 
 
-                        sample.set("td_error",td_error)
-                        sample.set("td-past",td_error/past_likelyhood)
-                        sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
-                        sample.set("td-cur",td_error*current_likelyhood)
-                        sample.set("cur-past",current_likelyhood/past_likelyhood)
-                        sample.set("cur",current_likelyhood)
+                    sample.set("td_error",td_error)
+                    sample.set("td-past",td_error/past_likelyhood)
+                    sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
+                    sample.set("td-cur",td_error*current_likelyhood)
+                    sample.set("cur-past",current_likelyhood/past_likelyhood)
+                    sample.set("cur",current_likelyhood)
+
+                    if self.params['rb'] =='laber':
                         self.smaller_buffer.extend(sample)
-
-                    sample = self.smaller_buffer.sample()
+                        sample = self.smaller_buffer.sample()
+                    elif self.params['rb'] =='likely':
+                        sample = get_n_likeliest(sample, "cur", self.batch_size)
                 else:
                     sample = self.replay_buffer.sample()
 
@@ -415,15 +447,21 @@ class QAgent():
                     weights = sample['_weight']
 
 
-                if self.loss_corrected_for_others:
-                    weights *= self.importance_weight(sample, completed_episodes)
+                if self.loss_correction_for_others != 'none':
+                    others_correction = sample[self.loss_correction_for_others]
+                    if args.sqrt_correction:
+                        others_correction = np.sqrt(others_correction)
+                    if args.clip_correction_after is not None:
+                        others_correction = np.clip(others_correction, -args.clip_correction_after, args.clip_correction_after)
+                    weights *= others_correction
+                    #self.importance_weight(sample, completed_episodes)
                     #print('Shapes:',td_target.shape, old_val.shape, weight.shape)
 
                 td_target = td_target.to(self.device)
                 old_val = old_val.to(self.device)
                 weights = weights.to(self.device)
 
-
+                #print(td_target.shape, old_val.shape, weights.shape)
                 loss = weighted_mse_loss(td_target, old_val, weights)
 
                 #if self.params['predict_others_likelyhood']:
@@ -649,9 +687,10 @@ class QAgent():
         return (num/denom).to(self.device)
     
     def current_and_past_others_actions_likelyhood(self, sample, completed_episodes):
-        current_likelyhood, past_likelyhood = torch.ones(self.batch_size), torch.ones(self.batch_size)
-
+        #current_likelyhood, past_likelyhood = torch.ones(self.batch_size), torch.ones(self.batch_size)
+        current_likelyhood, past_likelyhood = None, None
         for agent in range(self.env.n_agents):
+            
             if agent != self.agent_id:
                 sample = sample.cpu() #.to(self.device)
                 obs = sample['observations']
@@ -680,7 +719,7 @@ class QAgent():
                         considered_q_values = q_values + (action_mask-1.0)*9999.0
                         best_actions = torch.argmax(considered_q_values, dim=1)#.reshape(1)
 
-                        probability = torch.zeros(self.batch_size)
+                        #probability = torch.zeros_like(current_likelyhood)
                         actions = actions.squeeze()
 
                         assert torch.all(torch.sum(action_mask, 1) >0)
@@ -690,9 +729,14 @@ class QAgent():
                         #print((1.0-mask)*epsilon/torch.sum(action_mask, 1))
                         #print('action_mask:', action_mask)
                         #print(torch.sum(action_mask, 1))
-                        probability = mask*(1.0-epsilon) + (1.0-mask)*epsilon/torch.sum(action_mask, 1)
+                        proba_rd = epsilon/torch.sum(action_mask, 1)
+                        probability = mask*(1.0-epsilon+proba_rd) + (1.0-mask)*proba_rd
+                        if current_likelyhood is None:
+                            current_likelyhood = torch.ones_like(probability)
                         current_likelyhood *= probability
-                     
+                    
+                    if past_likelyhood is None:
+                        past_likelyhood = torch.ones_like(sample['actions_likelihood'][:,agent].squeeze())
                     past_likelyhood *= sample['actions_likelihood'][:,agent].squeeze()
 
         #print("current_likelyhood:", current_likelyhood) #shape
