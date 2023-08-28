@@ -44,9 +44,8 @@ import contextlib
 
 from pettingzoo.test import api_test
 
-#from pettingzoo.mpe import simple_v3, simple_spread_v3
-#from supersuit import dtype_v0
-
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import matplotlib.pyplot as plt
 
