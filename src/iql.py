@@ -150,13 +150,14 @@ def parse_args():
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
+    parser.add_argument("--loss_correction_for_others", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='td_error')
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber'], default='uniform',
         help="whether to use a prioritized replay buffer.")
     #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
     parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    args = parser.parse_args()
-    # fmt: on
+    args = parser.parse_args() 
+    # fmt: on 
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
 
     return args
@@ -358,6 +359,50 @@ class QAgent():
 
         return action, probability
 
+    def action_likelyhood(self, action, dict_obs, epsilon=None, others_explo=None, training=True):
+
+        normalized_obs = self.env.normalize_obs(dict_obs)
+        obs, avail_actions = normalized_obs['observation'], normalized_obs['action_mask']
+        #avail_actions = normalized_obs['action_mask']
+
+
+        with torch.no_grad():
+            obs = torch.Tensor(obs)
+            if self.params['add_epsilon']:
+                assert epsilon is not None
+                obs = torch.cat((obs, torch.tensor([epsilon])), 0)
+            if self.params['add_others_explo']:
+                assert others_explo is not None
+                obs = torch.cat((obs, torch.tensor(others_explo)), 0)
+
+            q_values = self.q_network(obs.to(self.device)).cpu()
+
+            assert sum(avail_actions)>0, avail_actions
+            considered_q_values = q_values + (avail_actions-1.0)*9999.0
+            #print(considered_q_values)
+            best_action = torch.argmax(considered_q_values).reshape(1)
+            #print(action)
+            probability = 1.0-epsilon if action==best_action else 1.0
+
+        assert probability > 0.0 , (probability, epsilon)
+        #assert action in avail_actions_ind
+        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+
+        if action not in avail_actions_ind:
+            #print(avail_actions_ind)
+            action = torch.tensor([np.random.choice(avail_actions_ind)])
+            probability = epsilon/sum(avail_actions)
+
+        #if completed_episodes % 1000 == 0:
+        #    self.writer.add_scalar(self.name+"/epsilon", epsilon, completed_episodes)
+        #    self.writer.add_scalar(self.name+"/action", action, completed_episodes)
+
+        return probability
+
+
+
+
+
     def train(self, completed_episodes):
         # ALGO LOGIC: training.
         if completed_episodes > self.learning_starts:
@@ -415,7 +460,7 @@ class QAgent():
 
                 weights = torch.ones(self.batch_size).to(self.device)
                 
-                if (self.params['rb'] != 'uniform') and self.loss_not_corrected_for_priorisation:
+                if (self.params['rb'] != 'uniform') and not self.loss_not_corrected_for_priorisation:
                     #priorities = self.compute_priorities(td_error)
                     #weights *= self.compute_prioritized_correction(priorities)
                     #print('weights:', weights.shape, weights.mean(), weights.max())
@@ -424,8 +469,9 @@ class QAgent():
                     weights = sample['_weight']
 
 
-                if self.loss_corrected_for_others:
-                    weights *= self.importance_weight(sample, completed_episodes)
+                if self.loss_correction_for_others is not None:
+                    weights *= sample[self.loss_correction_for_others]
+                    #self.importance_weight(sample, completed_episodes)
                     #print('Shapes:',td_target.shape, old_val.shape, weight.shape)
 
                 td_target = td_target.to(self.device)

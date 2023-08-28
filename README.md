@@ -1,5 +1,7 @@
 # Water-Bomber-Env
 
+tensorboard --logdir=/home/nono/Documents/Dassault/Water-Bomber-Env/results/runs/test --port 6007
+
 
  --prio td_error td-past td-cur-past td-cur cur-past cur --env-id water-bomber
  --rb uniform prioritized laber --env-id water-bomber
