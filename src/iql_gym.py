@@ -1,5 +1,7 @@
-from water_bomber_gym import WaterBomberEnv
-from simultaneous_env import SimultaneousEnv
+#from water_bomber_gym import WaterBomberEnv
+#from simultaneous_env import SimultaneousEnv
+from myenvs.simultaneous_env import *
+from myenvs.water_bomber_gym import *
 
 import random
 import yaml
@@ -59,6 +61,7 @@ from torchrl.data import LazyTensorStorage, LazyMemmapStorage, ListStorage, Tens
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
+    #parser.add_argument("--env-id", default='Water-bomber-v1',
     parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber'] ,default='simultaneous',
         help="the id of the environment")
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
@@ -396,6 +399,14 @@ class QAgent():
         sample.set("cur-past",current_likelyhood/past_likelyhood)
         sample.set("cur",current_likelyhood)
 
+        for key in ['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur']:
+
+            self.writer.add_scalar('Mean ratios/'+ key, sample[key].mean(), global_step=completed_episodes)
+            self.writer.add_scalar('Std ratios/'+ key, sample[key].std(), global_step=completed_episodes)
+
+        self.writer.add_scalar('Mean ratios/past', past_likelyhood.mean(), global_step=completed_episodes)
+        self.writer.add_scalar('Std ratios/past', past_likelyhood.std(), global_step=completed_episodes)
+
         return sample
 
     def train(self, completed_episodes):
@@ -627,7 +638,9 @@ class QAgent():
     def visualize_q_values(self, env, completed_episodes):
         arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-        observations, action_mask = env.reset()
+        observations, info = env.reset(return_info=True)
+        n_action_mask = info['avail_actions']
+
         obs = observations[self.agent_id] #['observation']
         #observation['observation'][-1] = 5
         #assert observation[-2] == self.agent_id
@@ -761,7 +774,9 @@ class QAgent():
 def visualize_trajectory(env, agents, completed_episodes):
     arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
-    n_obs, n_action_mask = env.reset(deterministic=True)
+    n_obs, info = env.reset(return_info=True, deterministic=True)
+    n_action_mask = info['avail_actions']
+    
     states = [env.get_state()[:-1]]
 
     q_values = np.zeros((env.X_MAX+1, env.Y_MAX+1))
@@ -797,7 +812,8 @@ def visualize_trajectory(env, agents, completed_episodes):
             actions.append(target_argmax)
 
         n_previous_action_mask = n_action_mask
-        n_next_obs, n_reward, n_terminated, n_action_mask = env.step(actions)
+        n_next_obs, n_reward, n_terminated, info = env.step(actions)
+        n_action_mask = info['avail_actions']
 
         n_obs = n_next_obs
         #n_previous_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
@@ -831,7 +847,9 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
         #for agent in q_agents:
         #    agent.visualize_q_values(env, completed_episodes)
 
-    n_obs, n_action_mask = env.reset()
+    n_obs, info = env.reset(return_info=True)
+    n_action_mask = info['avail_actions']
+    
     #print("n_obs", n_obs)
     #n_previous_action_mask = [env.get_avail_agent_actions(agent_id) for agent_id in range(env.n_agents)]
     terminated = False
@@ -878,7 +896,9 @@ def run_episode(env, q_agents, completed_episodes, params, training=False, visua
             env.render()
 
         n_previous_action_mask = n_action_mask
-        n_next_obs, n_reward, n_terminated, n_action_mask = env.step(actions)
+        n_next_obs, n_reward, n_terminated, info = env.step(actions)
+        n_action_mask = info['avail_actions']
+
         if False:
             print("n_next_obs", n_next_obs)
             print("n_reward", n_reward)
@@ -946,6 +966,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     #experiment_hash = str(dict_hash(params))
 
+    #env = gym.make(env_id)
     if env_id == 'simultaneous':
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
     elif env_id == 'water-bomber':

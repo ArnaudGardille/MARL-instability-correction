@@ -33,3 +33,9 @@ python src/run_experiments.py --rb laber --prio none td_error td-past td-cur-pas
 tensorboard --logdir=/home/nono/Documents/Dassault/Water-Bomber-Env/results/ --port 6008
 
 python src/run_experiments.py --single-agent True False
+
+
+
+/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/run_experiments.py  --add-epsilon True False --add-others-explo True False --env-id water-bomber 
+/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/run_experiments.py --single-agent True False  --env-id water-bomber --n-agents 2 3 4
+python src/run_experiments.py --rb uniform likely --prio none --filter td_error td-past td-cur-past td-cur cur-past cur --env-id water-bomber
