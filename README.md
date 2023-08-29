@@ -26,3 +26,10 @@ tensorboard --logdir=/home/nono/Documents/Dassault/Water-Bomber-Env/results/runs
 python src/run_experiments.py --rb prioritized likely --single-agent True
 
 python src/run_experiments.py -rb uniform likely --prio none --single-agent True 
+
+python src/run_experiments.py --rb uniform likely --prio none --filter td_error td-past td-cur-past td-cur cur-past cur
+python src/run_experiments.py --rb laber --prio none td_error td-past td-cur-past td-cur cur-past cur --rb laber  --sqrt-correction
+
+tensorboard --logdir=/home/nono/Documents/Dassault/Water-Bomber-Env/results/ --port 6008
+
+python src/run_experiments.py --single-agent True False

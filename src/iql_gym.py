@@ -940,7 +940,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             #print('setting', k, 'to', v)
             params[k] = v
     #params.update(args)
-    pprint(params)
+    if __name__ == "__main__":
+        pprint(params)
     old_params = copy(params)
 
     #experiment_hash = str(dict_hash(params))
