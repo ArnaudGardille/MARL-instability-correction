@@ -21,5 +21,5 @@ tensorboard --logdir=/home/nono/Documents/Dassault/Water-Bomber-Env/results/runs
   python src/run_experiments.py --rb uniform prioritized laber likely
   python src/run_experiments.py --rb  prioritized  likely
   python src/run_experiments.py --rb uniform likely --prio none
-  python src/run_experiments.py --loss-correction-for-others cur-past --clip-correction-after
+  python src/run_experiments.py --loss-correction-for-others cur-past --clip-correction-after 0.1 0.2 0.5 1.0 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import os 
 sns.set_theme(style="darkgrid")
 
-prios=('td_error', 'td-cur', 'cur', 'td-past', 'td-cur-past', 'cur-past' )
+prios=('td_error', 'td-cur', 'cur', 'td-past', 'td-cur-past', 'cur-past')
 # 'td/past' 'td*cur/past' 'cur/past' 
 
 params = {

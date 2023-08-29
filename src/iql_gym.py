@@ -144,7 +144,7 @@ def parse_args():
     #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'])
-    parser.add_argument("--loss-correction-for-others", choices=[None, 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
+    parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], default='uniform')
@@ -382,6 +382,20 @@ class QAgent():
         #    self.writer.add_scalar(str(self.agent_id)+"/action", action, completed_episodes)
 
         return float(action)
+    
+    def add_ratios(self, sample, completed_episodes):
+        td_error = self.get_td_error(sample).to('cpu')
+        current_likelyhood, past_likelyhood = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
+        #current_likelyhood, past_likelyhood = current_likelyhood.to(self.device) , past_likelyhood.to(self.device) 
+
+        sample.set("td_error",td_error)
+        sample.set("td-past",td_error/past_likelyhood)
+        sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
+        sample.set("td-cur",td_error*current_likelyhood)
+        sample.set("cur-past",current_likelyhood/past_likelyhood)
+        sample.set("cur",current_likelyhood)
+
+        return sample
 
     def train(self, completed_episodes):
         # ALGO LOGIC: training.
@@ -393,16 +407,7 @@ class QAgent():
                     #for _ in range(4): #(self.smaller_buffer_size // self.buffer_size)+1):
                     sample = self.replay_buffer.sample()
                     
-                    td_error = self.get_td_error(sample).to('cpu')
-                    current_likelyhood, past_likelyhood = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
-                    #current_likelyhood, past_likelyhood = current_likelyhood.to(self.device) , past_likelyhood.to(self.device) 
-
-                    sample.set("td_error",td_error)
-                    sample.set("td-past",td_error/past_likelyhood)
-                    sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
-                    sample.set("td-cur",td_error*current_likelyhood)
-                    sample.set("cur-past",current_likelyhood/past_likelyhood)
-                    sample.set("cur",current_likelyhood)
+                    sample = self.add_ratios(sample, completed_episodes)
 
                     if self.params['rb'] =='laber':
                         self.smaller_buffer.extend(sample)
@@ -445,13 +450,16 @@ class QAgent():
                     #elif self.params['']rb == 'prioritized':
                     weights = sample['_weight']
 
+                #print(self.loss_correction_for_others)
+                if self.loss_correction_for_others not in [None, 'none']:
+                    if self.loss_correction_for_others not in sample.keys():
+                        sample = self.add_ratios(sample, completed_episodes)
 
-                if self.loss_correction_for_others != 'none':
                     others_correction = sample[self.loss_correction_for_others]
                     if self.sqrt_correction:
-                        others_correction = np.sqrt(others_correction)
+                        others_correction = torch.sqrt(others_correction)
                     if self.clip_correction_after is not None:
-                        others_correction = np.clip(others_correction, -args.clip_correction_after, args.clip_correction_after)
+                        others_correction = torch.clip(others_correction, -self.clip_correction_after, self.clip_correction_after)
                     weights *= others_correction
                     #self.importance_weight(sample, completed_episodes)
                     #print('Shapes:',td_target.shape, old_val.shape, weight.shape)
@@ -1084,6 +1092,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     with open(path/ run_name/'params.yaml', 'w') as f:
         yaml.dump(params, f, default_flow_style=False)
 
+    pprint(params)
     result_df = result_df.assign(**params)
     #os.makedirs(path / experiment_hash, exist_ok=True)
     result_df.to_csv(path / run_name / 'results.csv', index=False)

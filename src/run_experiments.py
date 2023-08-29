@@ -85,8 +85,8 @@ def parse_args():
     parser.add_argument("--clip-correction-after", type=float, nargs="*")
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
-    parser.add_argument("--prio", choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
-    parser.add_argument("--loss_correction_for_others", choices=[None, 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
+    parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
+    parser.add_argument("--loss_correction_for_others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], nargs="*",
         help="whether to use a prioritized replay buffer.")
     args = parser.parse_args()
@@ -103,7 +103,10 @@ for k, v in vars(args).items():
     if v is not None:
         print(k, ': ', v)
         if type(v)==list:
-            params_list_choice[k] = v
+            if len(v)>1:
+                params_list_choice[k] = v
+            else:
+                params_const[k] = v[0]
         else:
             params_const[k] = v
 

@@ -51,3 +51,7 @@ loss_corrected_for_others: False
 loss_not_corrected_for_priorisation: False
 prio: 'td_error' #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='')
 rb: 'uniform' # choices=['uniform', 'prioritized', 'laber'], default='uniform',
+
+loss_correction_for_others: 'none'
+sqrt_correction: False
+clip_correction_after: 
