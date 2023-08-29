@@ -52,3 +52,4 @@ rb: uniform # choices=['uniform', 'prioritized', 'laber'], default='uniform',
 loss_correction_for_others: 'none'
 sqrt_correction: False
 clip_correction_after: 
+filter: td-past

@@ -143,7 +143,8 @@ def parse_args():
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'])
+    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="?", const=True)
+    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
@@ -413,7 +414,7 @@ class QAgent():
                         self.smaller_buffer.extend(sample)
                         sample = self.smaller_buffer.sample()
                     elif self.params['rb'] =='likely':
-                        sample = get_n_likeliest(sample, "cur", self.batch_size)
+                        sample = get_n_likeliest(sample, "cur-past", self.batch_size)
                 else:
                     sample = self.replay_buffer.sample()
 
@@ -442,13 +443,15 @@ class QAgent():
 
                 weights = torch.ones(self.batch_size).to(self.device)
                 
-                if (self.params['rb'] != 'uniform') and self.loss_not_corrected_for_priorisation:
+                #((self.params['rb'] == 'prioritized') or (self.params['rb'] == 'laber'))
+                if '_weight' in sample.keys() and not self.loss_not_corrected_for_priorisation:
                     #priorities = self.compute_priorities(td_error)
                     #weights *= self.compute_prioritized_correction(priorities)
                     #print('weights:', weights.shape, weights.mean(), weights.max())
                     #sample['_weight']
                     #elif self.params['']rb == 'prioritized':
-                    weights = sample['_weight']
+                    #weights = sample['_weight']
+                    sample['_weight'] = torch.ones(self.batch_size).to(self.device)
 
                 #print(self.loss_correction_for_others)
                 if self.loss_correction_for_others not in [None, 'none']:
@@ -698,7 +701,7 @@ class QAgent():
         current_likelyhood, past_likelyhood = None, None
         for agent in range(self.env.n_agents):
             
-            if agent != self.agent_id:
+            if (not self.single_agent and agent != self.agent_id) or (self.single_agent and agent == self.agent_id):
                 sample = sample.cpu() #.to(self.device)
                 obs = sample['observations']
                 action_mask = sample['action_mask']

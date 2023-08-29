@@ -1,3 +1,5 @@
+NB_RUNS = 3
+
 #from iql import run_training
 from iql_gym import run_training
 import pandas as pd 
@@ -84,7 +86,7 @@ def parse_args():
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)) , nargs="?")
     parser.add_argument("--clip-correction-after", type=float, nargs="*")
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")
-    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
+    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="*")
     parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--loss_correction_for_others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], nargs="*",
@@ -133,12 +135,7 @@ test_params = {
     'evaluation_episodes':100,
 }
 
-NAMES = {
-    "loss-corrected-for-others":"",
-    "loss-not-corrected-for-prioritized":"",
-}
 
-NB_RUNS = 10
 
 modified_params = [None, None]
 
