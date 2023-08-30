@@ -53,10 +53,9 @@ import matplotlib.pyplot as plt
 
 from gymnasium.spaces import *
 
-from torchrl.data import TensorDictReplayBuffer
 from tensordict import tensorclass, TensorDict
 from torchrl.data.replay_buffers.samplers import RandomSampler, PrioritizedSampler
-from torchrl.data import LazyTensorStorage, LazyMemmapStorage, ListStorage, TensorDictPrioritizedReplayBuffer
+from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage, LazyMemmapStorage, ListStorage, TensorDictPrioritizedReplayBuffer
 
 def parse_args():
     # fmt: off
@@ -425,7 +424,7 @@ class QAgent():
                         self.smaller_buffer.extend(sample)
                         sample = self.smaller_buffer.sample()
                     elif self.params['rb'] =='likely':
-                        sample = get_n_likeliest(sample, "cur-past", self.batch_size)
+                        sample = get_n_likeliest(sample, self.filter, self.batch_size)
                 else:
                     sample = self.replay_buffer.sample()
 
