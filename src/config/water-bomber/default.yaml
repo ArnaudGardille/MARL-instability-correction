@@ -2,7 +2,7 @@
 
 seed: 0
 torch_deterministic: True
-cuda: False
+device: 'cpu'
 track: False
 save_model: True
 upload_model: False

@@ -2,7 +2,7 @@
 
 seed: 0
 torch_deterministic: True
-cuda: False
+device: 'cpu'
 track: False
 display_video: False
 capture_video: False

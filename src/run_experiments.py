@@ -1,4 +1,4 @@
-NB_RUNS = 3
+#NB_RUNS = 3
 
 #from iql import run_training
 from iql_gym import run_training
@@ -23,7 +23,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--load-buffer", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--run-name", type=str, default=None)
-
+    parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
+        help="if toggled, cuda will be enabled by default")
     # Environment specific arguments
     parser.add_argument("--x-max", type=int)
     parser.add_argument("--y-max", type=int)
@@ -33,6 +34,7 @@ def parse_args():
     #parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--num-envs", type=int,
         help="the number of parallel game environments")
+    parser.add_argument("--nb-runs", type=int, default=3)
 
     # Algorithm specific arguments
     parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber'] ,default='simultaneous',
@@ -161,7 +163,7 @@ path = Path.cwd() / 'results' / experiment_name
 os.makedirs(path, exist_ok=True)
 
 results_df = []
-for run in range(NB_RUNS):
+for run in range(args.nb_runs):
     print("Run", run)
     #print('params_list_choices_dicts:', params_list_choices_dicts)
 
