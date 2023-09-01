@@ -251,7 +251,7 @@ def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, replay_buff
     Select batch_size transitions from replay_buffer that actions follow policy pi.
     """
     batch = replay_buffer[:len(replay_buffer)]
-
+    pprint(batch)
     state_id = random.randint(0, len(replay_buffer))
     state = batch[state_id,0]["observations"]
 
@@ -277,9 +277,14 @@ def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, replay_buff
         #print("others_distrib", others_distrib[:,others_actions])
         #print("nb_occ", nb_occ[others_actions])
         distrib = others_distrib[:,others_actions] / nb_occ[others_actions]
+        print("distrib", distrib)
 
         assert not torch.isnan(distrib).any(), distrib
         index = Categorical(probs=distrib.reshape(-1)).sample(sample_shape=(batch_size,)) 
+        print("batch:", batch)
+        print("index:", index)
+        
+        
         batch_agent = batch[index]
         batches.append(batch_agent)
     return batches
@@ -418,9 +423,9 @@ class QAgent():
     def train(self, sample, completed_episodes):
 
         sample = sample.to(self.device)
-        obs = sample['observations']
+        obs = sample['observations'].float()
         action_mask = sample['action_mask']
-        next_obs = sample['next_observations']
+        next_obs = sample['next_observations'].float()
         next_action_mask = sample['next_action_mask']
         reward = sample['rewards']
         dones = sample['dones']
@@ -536,9 +541,9 @@ class QAgent():
     def get_td_error(self, sample):
 
         sample = sample.to(self.device)
-        obs = sample['observations']
+        obs = sample['observations'].float()
         action_mask = sample['action_mask']
-        next_obs = sample['next_observations']
+        next_obs = sample['next_observations'].float()
         next_action_mask = sample['next_action_mask']
         reward = sample['rewards']
         dones = sample['dones']
@@ -813,12 +818,12 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
                 assert sum(action_mask) > 0 
 
             transition = {
-                'observations':torch.tensor(n_obs, dtype=torch.float).reshape(n_agents, -1),
+                'observations':torch.tensor(n_obs, dtype=torch.int64).reshape(n_agents, -1),
                 'action_mask':torch.tensor(n_previous_action_mask, dtype=torch.int64).reshape(n_agents, -1),
                 'actions':torch.tensor(n_action, dtype=torch.int64).reshape(n_agents, -1),
                 'actions_likelihood':torch.tensor(n_probabilities, dtype=torch.float).reshape(n_agents, -1),
                 'rewards':torch.tensor(n_reward, dtype=torch.float).reshape(n_agents, -1),
-                'next_observations':torch.tensor(n_next_obs, dtype=torch.float).reshape(n_agents, -1),
+                'next_observations':torch.tensor(n_next_obs, dtype=torch.int64).reshape(n_agents, -1),
                 'next_action_mask':torch.tensor(n_action_mask, dtype=torch.int64).reshape(n_agents, -1),
                 'dones':torch.tensor(n_terminated, dtype=torch.float).reshape(n_agents, -1),
                 #'td': 1.0#{a:1.0 for a in obs}
@@ -840,7 +845,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
     if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
         
-        get_correclty_sampled_transitions(q_agents, epsilon, params['batch_size'], replay_buffer)
+        #get_correclty_sampled_transitions(q_agents, epsilon, params['batch_size'], replay_buffer)
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
@@ -1128,9 +1133,9 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
         for agent_id, agent in enumerate(agents):
             
             sample = sample.to(agent.device)
-            obs = sample['observations'][:, agent_id]
+            obs = sample['observations'][:, agent_id].float()
             action_mask = sample['action_mask'][:, agent_id]
-            next_obs = sample['next_observations'][:, agent_id]
+            next_obs = sample['next_observations'][:, agent_id].float()
             next_action_mask = sample['next_action_mask'][:, agent_id]
             reward = sample['rewards'][:, agent_id]
             dones = sample['dones'][:, agent_id]
