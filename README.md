@@ -43,3 +43,13 @@ python src/run_experiments.py --rb uniform likely --prio none --filter td_error 
 python src/run_experiments.py --n-agents 6 8 10 12 14  --nb-runs 10 
 
 python src/run_experiments.py --rb uniform prioritized laber likely --nb-runs 1
+
+--nb-runs 100
+--nb-runs 3 --env-id water-bomber 
+
+python src/run_experiments.py --loss-correction-for-others none td_error td-past td-cur-past td-cur cur-past cur 
+python src/run_experiments.py --rb uniform prioritized laber likely 
+python src/run_experiments.py --rb laber --prio none td_error td-past td-cur-past td-cur cur-past cur
+python src/run_experiments.py --single-agent True False --nb-runs 3  --env-id water-bomber 
+python src/run_experiments.py --add-epsilon True False --add-others-explo True False 
+python src/run_experiments.py --rb uniform likely --prio none --filter td_error td-past td-cur-past td-cur cur-past cur
