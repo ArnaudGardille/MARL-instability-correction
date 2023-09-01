@@ -41,3 +41,5 @@ python src/run_experiments.py --rb uniform likely --prio none --filter td_error 
 /home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/run_experiments.py --single-agent True False  --env-id water-bomber --n-agents 2 3 4
 
 python src/run_experiments.py --n-agents 6 8 10 12 14  --nb-runs 10 
+
+python src/run_experiments.py --rb uniform prioritized laber likely --nb-runs 1
