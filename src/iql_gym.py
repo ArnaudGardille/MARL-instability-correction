@@ -2,6 +2,7 @@
 #from simultaneous_env import SimultaneousEnv
 from myenvs.simultaneous_env import *
 from myenvs.water_bomber_gym import *
+from torch.distributions.categorical import Categorical
 
 import random
 import yaml
@@ -155,7 +156,7 @@ def parse_args():
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely'], default='uniform')
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
     #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
     parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -233,6 +234,82 @@ def get_n_likeliest(batch, key, n):
     descending &= torch.cumsum(descending, 0) <= n
     return batch[descending]
 
+def get_agents_distrib(batch, q_agents, epsilon):
+    concat_distrib = []
+    for agent_id, agent in enumerate(q_agents):
+        obs = batch[:,agent_id]["observations"]
+        avail_actions = batch[:,agent_id]["action_mask"]
+        distrib = agent.get_distrib(obs, avail_actions, epsilon)
+        concat_distrib.append(distrib)
+
+    concat_distrib = torch.stack(concat_distrib, dim=1)
+    return concat_distrib
+    
+
+def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, replay_buffer):
+    """
+    Select batch_size transitions from replay_buffer that actions follow policy pi.
+    """
+    batch = replay_buffer[:len(replay_buffer)]
+
+    state_id = random.randint(0, len(replay_buffer))
+    state = batch[state_id,0]["observations"]
+
+    res = torch.all(batch[:,0]["observations"] == state, dim=1)
+    batch = batch[res]
+    actions = batch["actions"]
+    nb = batch.shape[0]
+    if nb > 1:
+        print("nb:", batch.shape[0])
+
+    agents_distrib = get_agents_distrib(batch, q_agents, epsilon)
+    batches = []
+    for agent_id, agent in enumerate(q_agents):
+        ### BAD: ONLY WORK FOR 2 AGENTS
+        # We should create a recusrive sampling for multi agents
+        #others_distrib = torch.cat((agents_distrib[:,:agent_id],agents_distrib[:,agent_id+1:]), dim=1)
+        #others_actions = torch.cat((actions[:,:agent_id],actions[:,agent_id+1:]), dim=1)
+        
+        others_distrib = agents_distrib[:,1-agent_id]
+        others_actions = actions[:,1-agent_id]
+        nb_possible_actions = others_distrib.shape[-1]
+        nb_occ = torch.bincount(others_actions.reshape(-1), minlength=nb_possible_actions)
+        #print("others_distrib", others_distrib[:,others_actions])
+        #print("nb_occ", nb_occ[others_actions])
+        distrib = others_distrib[:,others_actions] / nb_occ[others_actions]
+
+        assert not torch.isnan(distrib).any(), distrib
+        index = Categorical(probs=distrib.reshape(-1)).sample(sample_shape=(batch_size,)) 
+        batch_agent = batch[index]
+        batches.append(batch_agent)
+    return batches
+    #torch.bincount(index)
+    #return batch[res][index]
+  
+def collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_buffer):
+  """
+  Concatenate nb_states mini-batch of nb_transitions transitions samples according to the others current policy
+  """
+  index = torch.randint(high=len(replay_buffer),size=(nb_states,)) 
+  states = replay_buffer[index]['state']
+  pis = policy(states)
+  print("states", states)
+
+  micro_batches = []
+  for state, pi in zip(states, pis):
+    
+    micro_batch = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
+    micro_batches.append(micro_batch)
+  return torch.cat(micro_batches, dim=0)
+  
+
+
+
+
+
+
+
+
 class QAgent():
     def __init__(self, env, agent_id, params, obs_shape, act_shape, writer, experiment_hash=None):
         for k, v in params.items():
@@ -285,34 +362,39 @@ class QAgent():
         #if self.params['load_buffer']:
         #    self.load_rb()
 
+    def get_distrib(self, obs, avail_actions, epsilon):
+        with torch.no_grad():
+            obs = torch.Tensor(obs).float()
+            q_values = self.q_network(obs.to(self.device)).cpu()
 
+            #print(avail_actions)
+            #assert sum(avail_actions)>0, avail_actions
+            considered_q_values = q_values + (avail_actions-1.0)*99999.0
+            action = torch.argmax(considered_q_values, dim=1)
+
+        #assert action in avail_actions_ind
+        avail_actions = torch.tensor(avail_actions)
+        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+
+
+        proba_select_explo = epsilon/sum(avail_actions)
+        #avail_actions = env.get_avail_agent_actions(agent_id)
+        probability = avail_actions*proba_select_explo
+        probability[:,action] += 1.0 - epsilon
+
+        return probability
 
     def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
 
         with torch.no_grad():
-            obs = torch.Tensor(obs)
-            if self.params['add_epsilon']:
-                assert epsilon is not None
-                obs = torch.cat((obs, torch.tensor([epsilon])), 0)
-            if self.params['add_others_explo']:
-                assert others_explo is not None
-                obs = torch.cat((obs, torch.tensor(others_explo)), 0)
-            obs = obs.to(torch.float)
+            obs = torch.Tensor(obs).float()
+            
             q_values = self.q_network(obs.to(self.device)).cpu()
 
-            if self.boltzmann_policy:
-                tres = torch.nn.Threshold(0.001, 0.001)
-                probabilities = tres(q_values)*avail_actions
-                min_q_value = torch.min(q_values + (1.0-avail_actions)*9999.0)
-                probabilities -= probabilities.min()
-                probabilities /= probabilities.sum()
 
-                action = torch.multinomial(probabilities, 1)
-                probability = probabilities[action]
-            else:
-                assert sum(avail_actions)>0, avail_actions
-                considered_q_values = q_values + (avail_actions-1.0)*9999.0
-                action = torch.argmax(considered_q_values).reshape(1)
+            assert sum(avail_actions)>0, avail_actions
+            considered_q_values = q_values + (avail_actions-1.0)*99999.0
+            action = torch.argmax(considered_q_values).reshape(1)
 
         #assert action in avail_actions_ind
         avail_actions = torch.tensor(avail_actions)
@@ -627,9 +709,24 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     terminated = False
     episode_reward = 0
     nb_steps = 0
+    n_next_obs = None
     #n_action_mask = n_previous_action_mask
     n_previous_action_mask = None
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
+
+
+    n_obs = torch.tensor(n_obs)
+    #n_next_obs = torch.tensor(n_next_obs)
+
+    if params['add_epsilon']:
+        #for a in obs:
+        n_epsilon = torch.full((n_agents,1), epsilon)
+        n_obs = torch.cat((n_obs, n_epsilon), dim=1).float()
+        #n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
+    if params['add_others_explo']:
+        n_obs = torch.cat((n_obs, n_other_act_randomly.float()), 1).float()
+    n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
+    n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
 
     while not terminated:
         #n_obs = env.get_obs()
@@ -638,8 +735,10 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         n_action = []
         n_probabilities = []
-        n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
-        n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
+        
+
+        
+        
         for agent_id, obs in enumerate(n_obs):
             avail_actions = n_action_mask[agent_id]
             #env.get_avail_agent_actions(agent_id)
@@ -650,14 +749,14 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
                 action = np.random.choice(avail_actions_ind).reshape(-1)
                 probability = epsilon/sum(avail_actions)
             else:
-                #avail_actions = env.get_avail_agent_actions(agent_id)
+                
                 action = q_agents[agent_id].act(obs, avail_actions, epsilon, others_explo=n_other_act_randomly[agent_id])
                 probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) if training else 1.0
 
             assert probability > 0.0 , (probability, epsilon)
             
             
-            n_action.append(float(action))
+            n_action.append(action)
             n_probabilities.append(probability)
 
         if False:
@@ -668,25 +767,33 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         n_previous_action_mask = n_action_mask
         n_action = [int(a) for a in n_action]
         n_next_obs, n_reward, n_terminated, info = env.step(n_action)
+
+        n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
+        n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
+
+        n_next_obs = torch.tensor(n_next_obs)
+        #n_next_obs = torch.tensor(n_next_obs)
+
+        if params['add_epsilon']:
+            #for a in obs:
+            n_epsilon = torch.full((n_agents,1), epsilon)
+            n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1).float()
+            #n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
+        if params['add_others_explo']:
+            n_next_obs = torch.cat((n_next_obs, n_other_act_randomly.float()), 1).float()
+
         if np.array(n_reward).size ==1:
             n_reward = np.full((n_agents, 1), n_reward)
         if np.array(n_terminated).size ==1:
             n_terminated = np.full((n_agents, 1), n_terminated)
 
-        n_obs = torch.tensor(n_obs)
-        n_next_obs = torch.tensor(n_next_obs)
-        action = deepcopy(action)
         
-        if params['add_epsilon']:
-            #for a in obs:
-            n_epsilon = torch.full((n_agents,1), epsilon)
-            n_obs = torch.cat((n_obs, n_epsilon), dim=1)
-            n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
-        if params['add_others_explo']:
-            n_obs = torch.cat((n_obs, n_other_act_randomly.float()), 1)
-            n_next_obs = torch.cat((n_next_obs, torch.tensor(n_other_act_randomly)), 1)
+        #action = deepcopy(action)
+        
+        
+            #n_next_obs = torch.cat((n_next_obs, torch.tensor(n_other_act_randomly)), 1)
 
-        n_next_obs = torch.tensor(n_next_obs, dtype=torch.double)
+        n_next_obs = torch.tensor(n_next_obs, dtype=torch.float)
         n_action_mask = info['avail_actions']
 
         if False:
@@ -706,14 +813,14 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
                 assert sum(action_mask) > 0 
 
             transition = {
-                'observations':torch.tensor(n_obs, dtype=torch.float32).reshape(n_agents, -1),
+                'observations':torch.tensor(n_obs, dtype=torch.float).reshape(n_agents, -1),
                 'action_mask':torch.tensor(n_previous_action_mask, dtype=torch.int64).reshape(n_agents, -1),
                 'actions':torch.tensor(n_action, dtype=torch.int64).reshape(n_agents, -1),
-                'actions_likelihood':torch.tensor(n_probabilities, dtype=torch.float32).reshape(n_agents, -1),
-                'rewards':torch.tensor(n_reward, dtype=torch.float32).reshape(n_agents, -1),
-                'next_observations':torch.tensor(n_next_obs, dtype=torch.float32).reshape(n_agents, -1),
+                'actions_likelihood':torch.tensor(n_probabilities, dtype=torch.float).reshape(n_agents, -1),
+                'rewards':torch.tensor(n_reward, dtype=torch.float).reshape(n_agents, -1),
+                'next_observations':torch.tensor(n_next_obs, dtype=torch.float).reshape(n_agents, -1),
                 'next_action_mask':torch.tensor(n_action_mask, dtype=torch.int64).reshape(n_agents, -1),
-                'dones':torch.tensor(n_terminated, dtype=torch.float32).reshape(n_agents, -1),
+                'dones':torch.tensor(n_terminated, dtype=torch.float).reshape(n_agents, -1),
                 #'td': 1.0#{a:1.0 for a in obs}
             }
 
@@ -733,6 +840,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
     if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
         
+        get_correclty_sampled_transitions(q_agents, epsilon, params['batch_size'], replay_buffer)
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
@@ -744,13 +852,17 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             big_sample = replay_buffer.sample()
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'])
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
-                
+
+        #elif params['rb'] == 'correction':
+
+
         else:
             sample = replay_buffer.sample()
             sample = add_ratios(sample, q_agents, epsilon, params['single_agent'])
         
         td_errors = []
         for agent_id, agent in enumerate(q_agents):
+            
             agent_td_error = agent.train(sample[:,agent_id], completed_episodes)
             td_errors.append(agent_td_error)
         #print(np.array(td_errors).shape)
@@ -828,7 +940,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     
     #env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=10)
     #WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'])
-    # env = dtype_v0(rps_v2.env(), np.float32)
+    # env = dtype_v0(rps_v2.env(), np.float)
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
     env.reset()
@@ -859,7 +971,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         size_obs += 1
     if params['add_others_explo']:
         size_obs += env.n_agents - 1
-    print("Size obs:", size_obs)
+    #print("Size obs:", size_obs)
 
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'])
 
@@ -960,7 +1072,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio):
     smaller_buffer = None
     rb_storage = LazyTensorStorage(buffer_size, device=device)
-    if rb_type == 'uniform':
+    if rb_type == 'uniform' or rb_type == 'correction':
         replay_buffer = TensorDictReplayBuffer(
             #replay_buffer = TensorDictReplayBuffer(
             #storage=ListStorage(buffer_size),
