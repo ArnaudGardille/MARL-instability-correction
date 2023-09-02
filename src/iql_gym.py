@@ -493,7 +493,7 @@ class QAgent():
         if self.save_model:
             self.save()
 
-        return td_error.detach().numpy()
+        return td_error.cpu().detach().numpy()
 
     
 
@@ -1144,7 +1144,7 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
 
             with torch.no_grad():
                     
-                q_values = agent.q_network(obs).cpu()
+                q_values = agent.q_network(obs)
 
                 considered_q_values = q_values + (action_mask-1.0)*9999.0
                 best_actions = torch.argmax(considered_q_values, dim=1)#.reshape(1)
@@ -1162,11 +1162,11 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
                 proba_rd = epsilon/torch.sum(action_mask, 1)
                 probability = mask*(1.0-epsilon+proba_rd) + (1.0-mask)*proba_rd
                 
-                current_likelyhood.append(probability.numpy())
-                past_likelyhood.append(old_probability.squeeze().numpy()) 
+                current_likelyhood.append(probability.cpu().numpy())
+                past_likelyhood.append(old_probability.squeeze().cpu().numpy()) 
 
-        others_current_likelyhood = torch.tensor(np.prod([current_likelyhood[:n]+current_likelyhood[n+1:] for n in range(len(agents))], axis=1))
-        others_past_likelyhood = torch.tensor(np.prod([past_likelyhood[:n]+past_likelyhood[n+1:] for n in range(len(agents))], axis=1))
+        others_current_likelyhood = torch.tensor(np.prod([current_likelyhood[:n]+current_likelyhood[n+1:] for n in range(len(agents))], axis=1)).cpu()
+        others_past_likelyhood = torch.tensor(np.prod([past_likelyhood[:n]+past_likelyhood[n+1:] for n in range(len(agents))], axis=1)).cpu()
         #torch.stack([torch.tensor(np.prod(current_likelyhood[:n]+current_likelyhood[n+1:], axis=1)) for n in range(len(agents))], dim=1)
         #others_past_likelyhood = torch.stack([torch.tensor(np.prod(past_likelyhood[:n]+past_likelyhood[n+1:])) for n in range(len(agents))], dim=1)
         return others_current_likelyhood.T, others_past_likelyhood.T

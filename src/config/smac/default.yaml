@@ -2,7 +2,7 @@
 
 seed: 0
 torch_deterministic: True
-device: 'cpu'
+device: 'cuda'
 track: False
 display_video: False
 capture_video: False
@@ -23,9 +23,9 @@ n_actions: 18
 env_id: simultaneous
 random_policy: False
 no_training: False
-total_timesteps: 10000
+total_timesteps: 1000
 learning_rate: 0.01
-buffer_size: 100000
+buffer_size: 200000
 gamma: 0.99
 tau: 1.
 evaluation_frequency: 10

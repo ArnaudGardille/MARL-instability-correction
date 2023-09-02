@@ -55,3 +55,4 @@ python src/run_experiments.py --add-epsilon True False --add-others-explo True F
 python src/run_experiments.py --rb uniform likely --prio none --filter td_error td-past td-cur-past td-cur cur-past cur
 
 python src/run_experiments.py --rb uniform prioritized laber likely --env-id smac --nb-runs 1
+python src/run_experiments.py --loss-correction-for-others none td_error td-past td-cur-past td-cur cur-past cur --nb-runs 100
