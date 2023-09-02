@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument("--nb-runs", type=int, default=3)
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber'] ,default='simultaneous',
+    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac'] ,default='simultaneous',
         help="the id of the environment")
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
