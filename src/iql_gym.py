@@ -246,17 +246,11 @@ def get_agents_distrib(batch, q_agents, epsilon):
     return concat_distrib
     
 
-def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, replay_buffer):
+def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, batch):
     """
     Select batch_size transitions from replay_buffer that actions follow policy pi.
     """
-    batch = replay_buffer[:len(replay_buffer)]
-    pprint(batch)
-    state_id = random.randint(0, len(replay_buffer))
-    state = batch[state_id,0]["observations"]
-
-    res = torch.all(batch[:,0]["observations"] == state, dim=1)
-    batch = batch[res]
+    
     actions = batch["actions"]
     nb = batch.shape[0]
     if nb > 1:
@@ -271,18 +265,12 @@ def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, replay_buff
         #others_actions = torch.cat((actions[:,:agent_id],actions[:,agent_id+1:]), dim=1)
         
         others_distrib = agents_distrib[:,1-agent_id]
-        others_actions = actions[:,1-agent_id]
+        others_actions = actions[:,1-agent_id][0]
         nb_possible_actions = others_distrib.shape[-1]
         nb_occ = torch.bincount(others_actions.reshape(-1), minlength=nb_possible_actions)
-        #print("others_distrib", others_distrib[:,others_actions])
-        #print("nb_occ", nb_occ[others_actions])
         distrib = others_distrib[:,others_actions] / nb_occ[others_actions]
-        print("distrib", distrib)
-
         assert not torch.isnan(distrib).any(), distrib
         index = Categorical(probs=distrib.reshape(-1)).sample(sample_shape=(batch_size,)) 
-        print("batch:", batch)
-        print("index:", index)
         
         
         batch_agent = batch[index]
@@ -292,20 +280,37 @@ def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, replay_buff
     #return batch[res][index]
   
 def collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_buffer):
-  """
-  Concatenate nb_states mini-batch of nb_transitions transitions samples according to the others current policy
-  """
-  index = torch.randint(high=len(replay_buffer),size=(nb_states,)) 
-  states = replay_buffer[index]['state']
-  pis = policy(states)
-  print("states", states)
+    """
+    Concatenate nb_states mini-batch of nb_transitions transitions samples according to the others current policy
+    """
 
-  micro_batches = []
-  for state, pi in zip(states, pis):
-    
-    micro_batch = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
-    micro_batches.append(micro_batch)
-  return torch.cat(micro_batches, dim=0)
+    """batch = replay_buffer[:len(replay_buffer)]
+    #pprint(batch)
+    state_id = random.randint(0, len(replay_buffer))
+    state = batch[state_id,0]["observations"]
+    res = torch.all(batch[:,0]["observations"] == state, dim=1)
+    """
+    batch = replay_buffer[:len(replay_buffer)]
+    index = torch.randint(high=len(replay_buffer),size=(nb_states,)) 
+    states = batch[index]['observations']
+    print("states", states.shape)
+
+    micro_batches = []
+    for state in states[:,0]:
+        print("batch", batch)
+        print("state", state)
+        
+        res = torch.all(batch[:,0]["observations"] == state, dim=1)
+        sub_batch = batch[res]
+        micro_batch = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, sub_batch)
+        micro_batch = torch.stack(micro_batch, dim=1)
+        print("micro_batch", micro_batch)
+        micro_batches.append(micro_batch)
+    batch = torch.stack(micro_batches, dim=0)
+    # need to merge the 2 first dim
+    print("final batch", batch)
+    print("final batch", batch)
+    return batch
   
 
 
@@ -370,21 +375,22 @@ class QAgent():
     def get_distrib(self, obs, avail_actions, epsilon):
         with torch.no_grad():
             obs = torch.Tensor(obs).float()
+            
             q_values = self.q_network(obs.to(self.device)).cpu()
 
-            #print(avail_actions)
-            #assert sum(avail_actions)>0, avail_actions
+
             considered_q_values = q_values + (avail_actions-1.0)*99999.0
             action = torch.argmax(considered_q_values, dim=1)
 
         #assert action in avail_actions_ind
         avail_actions = torch.tensor(avail_actions)
-        avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
+        avail_actions_ind = np.nonzero(avail_actions)
 
 
-        proba_select_explo = epsilon/sum(avail_actions)
+        proba_select_explo = epsilon/torch.sum(avail_actions, dim=1)
         #avail_actions = env.get_avail_agent_actions(agent_id)
-        probability = avail_actions*proba_select_explo
+        probability = avail_actions*proba_select_explo.reshape((-1, 1))
+        probability = torch.nan_to_num(probability, nan=0.0)
         probability[:,action] += 1.0 - epsilon
 
         return probability
@@ -723,6 +729,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     n_obs = torch.tensor(n_obs)
     #n_next_obs = torch.tensor(n_next_obs)
 
+    n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
+    n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
+
     if params['add_epsilon']:
         #for a in obs:
         n_epsilon = torch.full((n_agents,1), epsilon)
@@ -730,8 +739,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         #n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
     if params['add_others_explo']:
         n_obs = torch.cat((n_obs, n_other_act_randomly.float()), 1).float()
-    n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
-    n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
+    
 
     while not terminated:
         #n_obs = env.get_obs()
@@ -754,7 +762,6 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
                 action = np.random.choice(avail_actions_ind).reshape(-1)
                 probability = epsilon/sum(avail_actions)
             else:
-                
                 action = q_agents[agent_id].act(obs, avail_actions, epsilon, others_explo=n_other_act_randomly[agent_id])
                 probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) if training else 1.0
 
@@ -845,7 +852,6 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
     if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
         
-        #get_correclty_sampled_transitions(q_agents, epsilon, params['batch_size'], replay_buffer)
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
@@ -858,15 +864,19 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'])
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
 
-        #elif params['rb'] == 'correction':
-
-
+        elif params['rb'] == 'correction':
+            #samples = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
+            nb_states, nb_transitions = params['batch_size'] // 10, 10
+            samples = collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_buffer)
+            samples.reshape(params['batch_size'])
         else:
             sample = replay_buffer.sample()
             sample = add_ratios(sample, q_agents, epsilon, params['single_agent'])
         
+        if params['rb'] != 'correction':
+            samples = [sample for _ in range(n_agents)]
         td_errors = []
-        for agent_id, agent in enumerate(q_agents):
+        for agent_id, (agent, sample) in enumerate(zip(q_agents, samples)):
             
             agent_td_error = agent.train(sample[:,agent_id], completed_episodes)
             td_errors.append(agent_td_error)
@@ -999,7 +1009,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         agent_0 = q_agents[0]
         for agent in range(env.n_agents):
             q_agents[agent].q_network = agent_0.q_network
-            q_agents[agent].replay_buffer = agent_0.replay_buffer
+            #q_agents[agent].replay_buffer = agent_0.replay_buffer
 
     #with contextlib.suppress(Exception):
 
