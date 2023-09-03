@@ -61,3 +61,7 @@ python src/run_experiments.py --single-agent True False --nb-runs 3  --env-id wa
  python src/run_experiments.py --add-epsilon True False --add-others-explo True False --nb-runs 100
  python src/run_experiments.py --rb laber --prio none td_error td-past td-cur-past td-cur cur-past cur --nb-runs 100
  python src/run_experiments.py --add-epsilon True False --add-others-explo True False --env-id water-bomber 
+
+  --rb  
+
+  python src/run_experiments.py --rb uniform prioritized laber likely correction --nb-runs 3 --env-id water-bomber 
