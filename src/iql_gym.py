@@ -253,8 +253,8 @@ def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, batch):
     
     actions = batch["actions"]
     nb = batch.shape[0]
-    if nb > 1:
-        print("nb:", batch.shape[0])
+    #if nb > 1:
+    #print("nb:", batch.shape[0])
 
     agents_distrib = get_agents_distrib(batch, q_agents, epsilon)
     batches = []
@@ -293,23 +293,22 @@ def collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_b
     batch = replay_buffer[:len(replay_buffer)]
     index = torch.randint(high=len(replay_buffer),size=(nb_states,)) 
     states = batch[index]['observations']
-    print("states", states.shape)
+    #print("states", states.shape)
 
     micro_batches = []
     for state in states[:,0]:
-        print("batch", batch)
-        print("state", state)
+        #print("batch", batch)
+        #print("state", state)
         
         res = torch.all(batch[:,0]["observations"] == state, dim=1)
         sub_batch = batch[res]
         micro_batch = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, sub_batch)
         micro_batch = torch.stack(micro_batch, dim=1)
-        print("micro_batch", micro_batch)
+        #print("micro_batch", micro_batch)
         micro_batches.append(micro_batch)
     batch = torch.stack(micro_batches, dim=0)
     # need to merge the 2 first dim
-    print("final batch", batch)
-    print("final batch", batch)
+    #print("final batch", batch)
     return batch
   
 
@@ -397,6 +396,8 @@ class QAgent():
 
     def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
 
+        print("obs", obs)
+        print("agent_id", self.agent_id)
         with torch.no_grad():
             obs = torch.Tensor(obs).float()
             
@@ -868,7 +869,10 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             #samples = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
             nb_states, nb_transitions = params['batch_size'] // 10, 10
             samples = collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_buffer)
-            samples.reshape(params['batch_size'])
+            samples = samples.reshape([params['batch_size']] + list(samples.shape[2:]))
+            samples = torch.permute(samples, [1, 0, 2])
+
+            #print("returned sample", samples)
         else:
             sample = replay_buffer.sample()
             sample = add_ratios(sample, q_agents, epsilon, params['single_agent'])
@@ -924,7 +928,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     if env_id == 'simultaneous':
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
     elif env_id == 'water-bomber':
-        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'])
+        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
         #env = gym.make(f"smaclite/MMM2-v0")
         env = gym.make(f"smaclite/10m_vs_11m")

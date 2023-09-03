@@ -41,7 +41,7 @@ exploration_fraction: 0.8
 learning_starts: 1000
 train_frequency: 5
 single_agent: False
-add_id: False
+add_id: True
 add_epsilon: False
 add_others_explo: False
 dueling: True
