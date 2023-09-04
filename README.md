@@ -69,3 +69,4 @@ python src/run_experiments.py --single-agent True False --nb-runs 3  --env-id wa
 
 python src/run_experiments.py --add-epsilon True False --add-others-explo True False --nb-runs 10 --env-id water-bomber 
 python src/run_experiments.py --rb uniform likely --prio none --filter cur-past cur --nb-runs 3 --env-id water-bomber
+python src/run_experiments.py  --rb prioritized likely --filter td-cur --nb-runs 10 --env-id water-bomber
