@@ -265,7 +265,7 @@ def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, batch):
         #others_actions = torch.cat((actions[:,:agent_id],actions[:,agent_id+1:]), dim=1)
         
         others_distrib = agents_distrib[:,1-agent_id]
-        others_actions = actions[:,1-agent_id][0]
+        others_actions = actions[:,1-agent_id][0].cpu()
         nb_possible_actions = others_distrib.shape[-1]
         nb_occ = torch.bincount(others_actions.reshape(-1), minlength=nb_possible_actions)
         distrib = others_distrib[:,others_actions] / nb_occ[others_actions]
@@ -372,10 +372,12 @@ class QAgent():
         #    self.load_rb()
 
     def get_distrib(self, obs, avail_actions, epsilon):
+        obs = obs.to(self.device)
+        avail_actions = avail_actions.cpu()
         with torch.no_grad():
             obs = torch.Tensor(obs).float()
             
-            q_values = self.q_network(obs.to(self.device)).cpu()
+            q_values = self.q_network(obs).cpu()
 
 
             considered_q_values = q_values + (avail_actions-1.0)*99999.0
@@ -392,7 +394,7 @@ class QAgent():
         probability = torch.nan_to_num(probability, nan=0.0)
         probability[:,action] += 1.0 - epsilon
 
-        return probability
+        return probability.cpu()
 
     def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
         with torch.no_grad():
