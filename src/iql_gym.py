@@ -395,9 +395,6 @@ class QAgent():
         return probability
 
     def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
-
-        print("obs", obs)
-        print("agent_id", self.agent_id)
         with torch.no_grad():
             obs = torch.Tensor(obs).float()
             
