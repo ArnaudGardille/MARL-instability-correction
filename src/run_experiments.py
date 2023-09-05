@@ -84,6 +84,8 @@ def parse_args():
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     #parser.add_argument("--loss-corrected-for", choices=['others', 'priorisation'], nargs="*")
     #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
+    parser.add_argument("--n-actions", type=int, nargs='*')
+    parser.add_argument("--verbose", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--loss-correction-for-others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)) , nargs="?")
     parser.add_argument("--clip-correction-after", type=float, nargs="*")
@@ -185,7 +187,7 @@ for run in range(args.nb_runs):
         param_dict = {**params_choice, **params_const}
         
         
-        steps, avg_opti = run_training(verbose=False, path=path, run_name=run_name, seed=run, **param_dict)
+        steps, avg_opti = run_training(path=path, run_name=run_name, seed=run, **param_dict)
         n = len(avg_opti)
         
         results = {

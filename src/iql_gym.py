@@ -137,6 +137,7 @@ def parse_args():
         help="the fraction of `total-timesteps` it takes from start-e to go end-e")
     parser.add_argument("--learning-starts", type=int, 
         help="timestep to start learning")
+    parser.add_argument("--n-actions", type=int)
     parser.add_argument("--train-frequency", type=int, 
         help="the frequency of training")
     parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
@@ -874,6 +875,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             nb_states, nb_transitions = params['batch_size'] // 10, 10
             samples = collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_buffer)
             samples = samples.reshape([params['batch_size']] + list(samples.shape[2:]))
+
             samples = torch.permute(samples, [1, 0, 2])
 
             #print("returned sample", samples)
