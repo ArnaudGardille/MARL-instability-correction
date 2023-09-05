@@ -145,6 +145,7 @@ def parse_args():
         help="whether to add agents identity to observation")
     parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to add epsilon to observation")
+    parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -858,11 +859,15 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'])
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
+            if params['prioritize_big_buffer']:
+                replay_buffer.update_tensordict_priority(big_sample)
 
         elif params['rb'] =='likely':
             big_sample = replay_buffer.sample()
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'])
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
+            if params['prioritize_big_buffer']:
+                replay_buffer.update_tensordict_priority(big_sample)
 
         elif params['rb'] == 'correction':
             #samples = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
@@ -991,7 +996,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         size_obs += env.n_agents - 1
     #print("Size obs:", size_obs)
 
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'])
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'])
 
 
     ### Creating Agents
@@ -1087,7 +1092,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     assert dict_hash(params) == dict_hash(old_params), (params, old_params)
     return steps, results
 
-def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio):
+def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False):
     smaller_buffer = None
     rb_storage = LazyTensorStorage(buffer_size, device=device)
     if rb_type == 'uniform' or rb_type == 'correction':
@@ -1113,12 +1118,17 @@ def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio):
         )
         
     else:
-
-        replay_buffer = TensorDictReplayBuffer(
-                #replay_buffer = TensorDictReplayBuffer(
-                #storage=ListStorage(buffer_size),
+        if prioritize_big_buffer:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
                 storage=rb_storage,
-                #collate_fn=lambda x: x, 
+                alpha = 1.0,#0.7,
+                beta = 1.0,#1.1,
+                priority_key="td_error",
+                batch_size=4*batch_size,
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                storage=rb_storage,
                 #priority_key="td_error",
                 batch_size=4*batch_size,
             )

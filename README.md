@@ -70,3 +70,10 @@ python src/run_experiments.py --single-agent True False --nb-runs 3  --env-id wa
 python src/run_experiments.py --add-epsilon True False --add-others-explo True False --nb-runs 10 --env-id water-bomber 
 python src/run_experiments.py --rb uniform likely --prio none --filter cur-past cur --nb-runs 3 --env-id water-bomber
 python src/run_experiments.py  --rb prioritized likely --filter td-cur --nb-runs 10 --env-id water-bomber
+
+
+python src/run_experiments.py --rb laber --prio none cur cur-past
+
+python src/run_experiments.py --rb uniform laber likely --prio cur --filter cur-past prioritize-big-buffer False 
+
+--loss-correction-for-others cur
