@@ -81,3 +81,5 @@ python src/run_experiments.py --rb laber --prio none cur cur-past --loss-correct
 
 python src/run_experiments.py --rb laber --prio none cur cur-past --loss-correction-for-others none cur cur-past  --nb-runs 100
 python src/run_experiments.py --rb laber --prio none cur cur-past --loss-correction-for-others none cur cur-past  --nb-runs 3 --env-id water-bomber 
+
+python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter cur-past --prioritize-big-buffer False --nb-runs 100
