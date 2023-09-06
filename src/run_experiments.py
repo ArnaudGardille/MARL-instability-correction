@@ -14,7 +14,8 @@ import argparse
 import yaml
 
 sns.set_theme(style="darkgrid")
-sns.set(rc={'figure.figsize':(11.7,8.27)})
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
 #import warnings
 #warnings.filterwarnings("ignore")
 

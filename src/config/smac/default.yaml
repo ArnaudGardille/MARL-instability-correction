@@ -54,5 +54,5 @@ sqrt_correction: False
 clip_correction_after: 
 filter: cur-past
 t_max: 200
-prioritize_big_buffer: True
+prioritize_big_buffer: False
 verbose: False
