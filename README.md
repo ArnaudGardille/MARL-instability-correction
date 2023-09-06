@@ -89,3 +89,7 @@ python src/remake_plots.py --name
 python src/run_experiments.py --rb laber likely --prio cur-past  --filter cur-past --loss-correction-for-others none cur cur-past  
 
 python src/run_experiments.py --rb laber --prio cur-past td_error td-cur-past --prioritize_big_buffer False  
+
+python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter cur-past
+
+--loss_correction_for_others none cur cur-past
