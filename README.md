@@ -109,3 +109,6 @@ python src/run_experiments.py --env-id smac --map 10m_vs_11m 27m_vs_30m 2c_vs_64
 
 
 python src/run_experiments.py --rb laber --prio none cur past --loss-correction-for-others none cur cur-past 
+
+python src/run_experiments.py --rb laber --prio none cur past --loss-correction-for-others none cur cur-past --nb-runs 3 --env-id water-bomber
+python src/run_experiments.py --rb laber --prio none cur past --loss-correction-for-others none cur cur-past  --nb-runs 100
