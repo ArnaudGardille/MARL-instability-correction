@@ -57,3 +57,4 @@ filter: cur-past
 prioritize_big_buffer: False
 t_max: 1
 verbose: False
+visualisation: False

@@ -58,3 +58,4 @@ prioritize_big_buffer: False
 verbose: False
 state_from_obs: True
 map: 3s_vs_5z
+visualisation: False
