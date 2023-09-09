@@ -85,6 +85,9 @@ def parse_args():
         help="whether to upload the saved model to huggingface")
     parser.add_argument("--hf-entity", type=str, default="",
         help="the user or org name of the model repository from the Hugging Face Hub")
+    
+    parser.add_argument("--plot-q-values", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -705,14 +708,14 @@ def visualize_trajectory(env, agents, completed_episodes):
     agents[0].writer.add_figure("q_values_imgs", fig, completed_episodes)
 
 
-def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False):
+def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False):
     if training:
         assert replay_buffer is not None
         if params['rb'] == 'laber':
             assert smaller_buffer is not None
 
     
-    if visualisation:
+    if plot_q_values:
         visualize_trajectory(env, q_agents, completed_episodes)
         #for agent in q_agents:
         #    agent.visualize_q_values(env, completed_episodes)
@@ -748,7 +751,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     while not terminated:
         #n_obs = env.get_obs()
         #state = env.get_state()
-        # env.render()  # Uncomment for rendering
+        if visualisation:
+            env.render()  # Uncomment for rendering
+
 
         n_action = []
         n_probabilities = []
@@ -1041,14 +1046,14 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
         if completed_episodes % params['evaluation_frequency'] == 0:
             if params['save_imgs']:
-                run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=True)
+                run_episode(env, q_agents, completed_episodes, params, training=False, plot_q_values=True)
             
             list_total_reward = []
             average_duration = 0.0
 
-            for _ in range(params['evaluation_episodes']):
+            for eval in range(params['evaluation_episodes']):
 
-                nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False)
+                nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=eval==0)
                 list_total_reward.append(total_reward)
                 average_duration += nb_steps
             
