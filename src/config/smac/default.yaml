@@ -23,20 +23,20 @@ n_actions: 18
 env_id: simultaneous
 random_policy: False
 no_training: False
-total_timesteps: 1000
+total_timesteps: 10000
 learning_rate: 0.001
-buffer_size: 30000
+buffer_size: 700000
 gamma: 0.99
 tau: 1.
 evaluation_frequency: 100
 evaluation_episodes: 10
 target_network_frequency: 50
-batch_size:  1000 #2**18, #256, #
+batch_size:  10000 #2**18, #256, #
 start_e: 0.99
 end_e: 0.05
 exploration_fraction: 0.8
 learning_starts: 10
-train_frequency: 1
+train_frequency: 10
 single_agent: False
 add_id: False
 add_epsilon: False
@@ -53,7 +53,7 @@ loss_correction_for_others: 'none'
 sqrt_correction: False
 clip_correction_after: 
 filter: cur-past
-t_max: 200
+t_max: 100
 prioritize_big_buffer: False
 verbose: False
 state_from_obs: True

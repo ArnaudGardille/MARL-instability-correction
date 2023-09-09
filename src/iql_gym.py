@@ -33,7 +33,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import smaclite  # noqa
-
+import pygame
 from collections import Counter
 #from stable_baselines3 import DQN
 
@@ -87,7 +87,7 @@ def parse_args():
         help="the user or org name of the model repository from the Hugging Face Hub")
     
     parser.add_argument("--plot-q-values", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True, default=False)
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -159,7 +159,7 @@ def parse_args():
     parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'mmm', 'mmm2'], nargs="?", const=True)
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'mmm', 'mmm2'], nargs="?", const=True, default='2s3z')
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
@@ -232,6 +232,19 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     slope = (end_e - start_e) / duration
     return max(slope * t + start_e, end_e)
 
+def create_env(env_id, params):
+    if env_id == 'simultaneous':
+        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
+    elif env_id == 'water-bomber':
+        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
+    elif env_id == 'smac':
+        #env = gym.make(f"smaclite/MMM2-v0")
+        env = gym.make(f"smaclite/"+params['map'])
+        
+    else:
+        raise NameError('Unknown env:'+env_id)
+    
+    return env
 
 def get_n_likeliest(batch, key, n):
     descending = batch[key].sort(dim=0, descending=True)
@@ -916,6 +929,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 def run_training(env_id, verbose=True, run_name='', path=None, **args):
     with open(Path('src/config/'+env_id+'/default.yaml')) as f:
         params = yaml.safe_load(f)
+
     
     if path is None:
         path = Path.cwd() / 'results'
@@ -938,16 +952,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         device = torch.device("cpu")
 
     #env = gym.make(env_id)
-    if env_id == 'simultaneous':
-        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
-    elif env_id == 'water-bomber':
-        env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
-    elif env_id == 'smac':
-        #env = gym.make(f"smaclite/MMM2-v0")
-        env = gym.make(f"smaclite/"+params['map'])
-        
-    else:
-        raise NameError('Unknown env:'+env_id)
+    env = create_env(env_id, params)
+    visu_env = create_env(env_id, params)
+
 
     #if params['run_name'] is None:
     #    params['run_name'] = f"iql_{int(time.time())}"
@@ -1053,7 +1060,11 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
             for eval in range(params['evaluation_episodes']):
                 
-                nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=eval==0)
+                if params['visualisation'] and eval==0:
+                    nb_steps, total_reward = run_episode(visu_env, q_agents, completed_episodes, params, training=False, visualisation=True)
+                else:
+                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=False)
+
                 list_total_reward.append(total_reward)
                 average_duration += nb_steps
             
@@ -1075,13 +1086,13 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             results.append(average_return)
                 
     env.close() 
+    visu_env.close()
 
     if params['save_buffer']:
         for agent in q_agents:
             q_agents[agent].save_rb()
 
 
-    env.close()
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]
     
     results_dict = {
