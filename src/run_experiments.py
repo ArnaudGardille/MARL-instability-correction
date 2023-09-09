@@ -98,6 +98,7 @@ def parse_args():
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], nargs="*",
         help="whether to use a prioritized replay buffer.")
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'mmm', 'mmm2'], nargs="*")
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"

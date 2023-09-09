@@ -103,3 +103,6 @@ python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter
 
 
  python src/run_experiments.py --rb laber likely --prio cur-past  --filter  none cur past cur-past --loss-correction-for-others none cur cur-past  
+--map 10m_vs_11m 27m_vs_30m 2c_vs_64zg 2s3z 2s_vs_1sc 3s5z 3s5z_vs_3s6z 3s_vs_5z bane_vs_bane corridor mmm mmm2
+
+python src/run_experiments.py --env-id smac --map 10m_vs_11m 27m_vs_30m 2c_vs_64zg 2s3z 2s_vs_1sc 3s5z 3s5z_vs_3s6z 3s_vs_5z bane_vs_bane corridor mmm mmm2 --nb-runs 1 --device cpu

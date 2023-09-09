@@ -156,6 +156,7 @@ def parse_args():
     parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="?", const=True)
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'mmm', 'mmm2'], nargs="?", const=True)
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
@@ -938,7 +939,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
         #env = gym.make(f"smaclite/MMM2-v0")
-        env = gym.make(f"smaclite/3s_vs_5z")
+        env = gym.make(f"smaclite/"+params['map'])
         
     else:
         raise NameError('Unknown env:'+env_id)
