@@ -93,7 +93,7 @@ def parse_args():
     parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="*")
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
+    parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
     parser.add_argument("--loss_correction_for_others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], nargs="*",
         help="whether to use a prioritized replay buffer.")

@@ -156,7 +156,7 @@ def parse_args():
     parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="?", const=True)
+    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
     parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'mmm', 'mmm2'], nargs="?", const=True)
@@ -1052,7 +1052,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             average_duration = 0.0
 
             for eval in range(params['evaluation_episodes']):
-
+                
                 nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=eval==0)
                 list_total_reward.append(total_reward)
                 average_duration += nb_steps
