@@ -93,3 +93,13 @@ python src/run_experiments.py --rb laber --prio cur-past td_error td-cur-past --
 python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter cur-past
 
 --loss_correction_for_others none cur cur-past
+
+
+python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter cur-past --env-id smac --single-agent True
+--prioritize-big-buffer True
+
+/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --total-timesteps 1000000
+ --buffer-size 20000000
+
+
+ python src/run_experiments.py --rb laber likely --prio cur-past  --filter  none cur past cur-past --loss-correction-for-others none cur cur-past  

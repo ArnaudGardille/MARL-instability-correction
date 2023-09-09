@@ -75,7 +75,7 @@ def parse_args():
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
-    parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], default='cpu', nargs="?", const=True,
+    parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
@@ -154,7 +154,7 @@ def parse_args():
     #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="?", const=True)
-    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="?", const=True)
+    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
@@ -677,6 +677,7 @@ def visualize_trajectory(env, agents, completed_episodes):
 
         n_previous_action_mask = n_action_mask
         n_next_obs, n_reward, n_terminated, info = env.step(actions)
+        
         n_action_mask = info['avail_actions']
 
         n_obs = n_next_obs
@@ -937,7 +938,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
         #env = gym.make(f"smaclite/MMM2-v0")
-        env = gym.make(f"smaclite/10m_vs_11m")
+        env = gym.make(f"smaclite/3s_vs_5z")
         
     else:
         raise NameError('Unknown env:'+env_id)
@@ -1019,6 +1020,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         agent_0 = q_agents[0]
         for agent in range(env.n_agents):
             q_agents[agent].q_network = agent_0.q_network
+            
+            assert q_agents[agent].q_network is agent_0.q_network
             #q_agents[agent].replay_buffer = agent_0.replay_buffer
 
     #with contextlib.suppress(Exception):
@@ -1096,7 +1099,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
 def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False):
     smaller_buffer = None
-    rb_storage = LazyTensorStorage(buffer_size, device=device)
+    rb_storage = LazyTensorStorage(buffer_size, device='cpu')
     if rb_type == 'uniform' or rb_type == 'correction':
         replay_buffer = TensorDictReplayBuffer(
             #replay_buffer = TensorDictReplayBuffer(
@@ -1208,6 +1211,8 @@ def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, w
     sample.set("td-cur",td_error*current_likelyhood)
     sample.set("cur-past",current_likelyhood/past_likelyhood)
     sample.set("cur",current_likelyhood)
+    sample.set("past",past_likelyhood)
+
 
     if (completed_episodes is not None) and (writer is not None):
         for key in ['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur']:

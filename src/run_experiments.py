@@ -97,7 +97,7 @@ def parse_args():
     parser.add_argument("--loss_correction_for_others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], nargs="*",
         help="whether to use a prioritized replay buffer.")
-    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
+    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
     args = parser.parse_args()
     # fmt: on
     #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
@@ -222,5 +222,5 @@ sns.lineplot(x="Step", y="Average optimality",
              hue=modified_params[0], style=modified_params[1],
              data=results_df, errorbar=('ci', 90))
 
-plt.savefig(path/'eval_prio.svg', format='svg')
+plt.savefig(path/'eval_prio.png', format='png')
 #plt.show()
