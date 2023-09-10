@@ -162,7 +162,7 @@ def parse_args():
     parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'mmm', 'mmm2'], nargs="?", const=True, default='2s3z')
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z')
     parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
@@ -769,15 +769,23 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
     if params['add_epsilon']:
         #for a in obs:
-        n_epsilon = torch.full((n_agents,1), epsilon)
+        if params['use_state']:
+            n_epsilon = torch.full((1,1), epsilon)
+        else:
+            n_epsilon = torch.full((n_agents,1), epsilon)
+
         if len(n_obs.shape)==1:
             n_epsilon = n_epsilon.reshape(-1)
-        print("n_obs", n_obs.shape)
-        print("n_epsilon", n_epsilon.shape)
+        
         n_obs = torch.cat((n_obs, n_epsilon), dim=-1).float()
         #n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
     if params['add_others_explo']:
-        n_obs = torch.cat((n_obs, n_other_act_randomly.float()), 1).float()
+        if params['use_state']:
+            n_other_act_randomly = torch.tensor(n_act_randomly).reshape(-1)
+
+        if len(n_obs.shape)==1:
+            n_other_act_randomly = torch.tensor(n_other_act_randomly).reshape(-1)
+        n_obs = torch.cat((n_obs, n_other_act_randomly.float()), dim=-1).float()
     
 
     while not terminated:
@@ -795,8 +803,6 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             avail_actions = n_action_mask[agent_id]
             #env.get_avail_agent_actions(agent_id)
             avail_actions_ind = np.nonzero(avail_actions)[0]
-            
-            
             if n_act_randomly[agent_id]:
                 action = np.random.choice(avail_actions_ind).reshape(-1)
                 probability = epsilon/sum(avail_actions)
@@ -827,14 +833,20 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         if params['add_epsilon']:
         #for a in obs:
-            n_epsilon = torch.full((n_agents,1), epsilon)
+            if params['use_state']:
+                n_epsilon = torch.full((1,1), epsilon)
+            else:
+                n_epsilon = torch.full((n_agents,1), epsilon)
             if len(n_obs.shape)==1:
                 n_epsilon = n_epsilon.reshape(-1)
-            print("n_obs", n_obs.shape)
-            print("n_epsilon", n_epsilon.shape)
-            n_obs = torch.cat((n_obs, n_epsilon), dim=-1).float()
+            
+            n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=-1).float()
         if params['add_others_explo']:
-            n_next_obs = torch.cat((n_next_obs, n_other_act_randomly.float()), 1).float()
+            if params['use_state']:
+                n_other_act_randomly = torch.tensor(n_act_randomly).reshape(-1)
+            if len(n_obs.shape)==1:
+                n_other_act_randomly = n_other_act_randomly.reshape(-1)
+            n_next_obs = torch.cat((n_next_obs, n_other_act_randomly.float()), dim=-1).float()
 
         if np.array(n_reward).size ==1:
             n_reward = np.full((n_agents, 1), n_reward)
@@ -1026,6 +1038,15 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     except:
         size_act = int(env.action_space(0).n)
     
+    if params['add_epsilon']:
+        size_obs += 1
+    if params['add_others_explo']:
+        size_obs += env.n_agents - 1
+        if params['use_state']:
+            size_obs += 1
+    #print("Size obs:", size_obs)
+
+
     if verbose:
         print('-'*20)
         print('num_agents: ',env.n_agents)
@@ -1036,11 +1057,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         print('size_act: ',size_act)    
         print('-'*20)
 
-    if params['add_epsilon']:
-        size_obs += 1
-    if params['add_others_explo']:
-        size_obs += env.n_agents - 1
-    #print("Size obs:", size_obs)
+    
 
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'])
 
@@ -1120,7 +1137,14 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     if params['save_buffer']:
         for agent in q_agents:
-            q_agents[agent].save_rb()
+            env_type = "_det" if params["deterministic_env"] else "_rd"
+            add_eps = "_eps" if params["add_epsilon"] else ""
+            add_expl = "_expl" if params["add_others_explo"] else ""
+
+            rb_path = Path.cwd() / 'rbs' / Path(params["env_id"]+env_type+add_eps+add_expl+'_replay_buffer.pickle')
+            with open(rb_path, 'wb') as handle:
+                pickle.dump(replay_buffer[:], handle)
+            
 
 
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]

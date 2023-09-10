@@ -119,3 +119,5 @@ python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter
 python src/run_experiments.py --add-epsilon True False  --env-id smac --nb-runs 3
 python src/run_experiments.py --add-others-explo True False --env-id smac --nb-runs 3
 python src/run_experiments.py --rb uniform prioritized laber --env-id smac --nb-runs 2
+
+/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --single-agent --add-id --env-id smac --map MMM2 --save-model --save-buffer --use-state

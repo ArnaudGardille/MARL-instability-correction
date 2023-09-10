@@ -23,9 +23,9 @@ n_actions: 18
 env_id: simultaneous
 random_policy: False
 no_training: False
-total_timesteps: 10000
+total_timesteps: 100000
 learning_rate: 0.001
-buffer_size: 700000
+buffer_size: 1000000
 gamma: 0.99
 tau: 1.
 evaluation_frequency: 100
@@ -41,7 +41,7 @@ single_agent: False
 add_id: False
 add_epsilon: False
 add_others_explo: False
-dueling: False
+dueling: True
 deterministic_env: False
 boltzmann_policy: False
 loss_corrected_for_others: False
@@ -53,7 +53,7 @@ loss_correction_for_others: 'none'
 sqrt_correction: False
 clip_correction_after: 
 filter: cur-past
-t_max: 100
+t_max: 60
 prioritize_big_buffer: False
 verbose: False
 state_from_obs: True
