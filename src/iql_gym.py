@@ -4,6 +4,9 @@ from myenvs.simultaneous_env import *
 from myenvs.water_bomber_gym import *
 from torch.distributions.categorical import Categorical
 
+from gym import Wrapper, ObservationWrapper
+from gym.spaces import MultiDiscrete, Box
+
 import random
 import yaml
 import numpy as np
@@ -244,6 +247,8 @@ def create_env(env_id, params):
     else:
         raise NameError('Unknown env:'+env_id)
     
+    if params['use_state']:
+        env = StateWrapper(env)
     return env
 
 def get_n_likeliest(batch, key, n):
@@ -264,6 +269,16 @@ def get_agents_distrib(batch, q_agents, epsilon):
     concat_distrib = torch.stack(concat_distrib, dim=1)
     return concat_distrib
     
+class StateWrapper(ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.env.reset()
+        state = self.env.get_state()
+        high = np.ones(np.size(state))
+        self.observation_space = Box(-high, high)
+
+    def observation(self, obs):
+        return self.env.get_state()
 
 def get_correclty_sampled_transitions(q_agents, epsilon, batch_size, batch):
     """
@@ -474,7 +489,7 @@ class QAgent():
 
         if self.loss_correction_for_others not in [None, 'none']:
             if self.loss_correction_for_others not in sample.keys():
-                sample = self.add_ratios(sample, completed_episodes)
+                sample = self.add_ratios(sample, completed_episodes, use_state=params['use_state'])
 
             others_correction = sample[self.loss_correction_for_others]
             if self.sqrt_correction:
@@ -755,7 +770,11 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     if params['add_epsilon']:
         #for a in obs:
         n_epsilon = torch.full((n_agents,1), epsilon)
-        n_obs = torch.cat((n_obs, n_epsilon), dim=1).float()
+        if len(n_obs.shape)==1:
+            n_epsilon = n_epsilon.reshape(-1)
+        print("n_obs", n_obs.shape)
+        print("n_epsilon", n_epsilon.shape)
+        n_obs = torch.cat((n_obs, n_epsilon), dim=-1).float()
         #n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
     if params['add_others_explo']:
         n_obs = torch.cat((n_obs, n_other_act_randomly.float()), 1).float()
@@ -770,11 +789,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         n_action = []
         n_probabilities = []
-        
-
-        
-        
-        for agent_id, obs in enumerate(n_obs):
+            
+        enum_obs = [(i, n_obs) for i in range(n_agents)] if params['use_state'] else enumerate(n_obs)
+        for agent_id, obs in enum_obs:
             avail_actions = n_action_mask[agent_id]
             #env.get_avail_agent_actions(agent_id)
             avail_actions_ind = np.nonzero(avail_actions)[0]
@@ -809,10 +826,13 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         #n_next_obs = torch.tensor(n_next_obs)
 
         if params['add_epsilon']:
-            #for a in obs:
+        #for a in obs:
             n_epsilon = torch.full((n_agents,1), epsilon)
-            n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1).float()
-            #n_next_obs = torch.cat((n_next_obs, n_epsilon), dim=1)
+            if len(n_obs.shape)==1:
+                n_epsilon = n_epsilon.reshape(-1)
+            print("n_obs", n_obs.shape)
+            print("n_epsilon", n_epsilon.shape)
+            n_obs = torch.cat((n_obs, n_epsilon), dim=-1).float()
         if params['add_others_explo']:
             n_next_obs = torch.cat((n_next_obs, n_other_act_randomly.float()), 1).float()
 
@@ -846,19 +866,27 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
                 assert sum(previous_action_mask) > 0 
                 assert sum(action_mask) > 0 
 
+            if params['use_state']:
+                observations = torch.tensor(n_obs, dtype=torch.float).reshape(1, -1)
+                next_observations = torch.tensor(n_next_obs, dtype=torch.float).reshape(1, -1)
+            else:
+                observations = torch.tensor(n_obs, dtype=torch.int64).reshape(n_agents, -1)
+                next_observations = torch.tensor(n_next_obs, dtype=torch.int64).reshape(n_agents, -1)
+            
             transition = {
-                'observations':torch.tensor(n_obs, dtype=torch.int64).reshape(n_agents, -1),
                 'action_mask':torch.tensor(n_previous_action_mask, dtype=torch.int64).reshape(n_agents, -1),
                 'actions':torch.tensor(n_action, dtype=torch.int64).reshape(n_agents, -1),
                 'actions_likelihood':torch.tensor(n_probabilities, dtype=torch.float).reshape(n_agents, -1),
                 'rewards':torch.tensor(n_reward, dtype=torch.float).reshape(n_agents, -1),
-                'next_observations':torch.tensor(n_next_obs, dtype=torch.int64).reshape(n_agents, -1),
                 'next_action_mask':torch.tensor(n_action_mask, dtype=torch.int64).reshape(n_agents, -1),
                 'dones':torch.tensor(n_terminated, dtype=torch.float).reshape(n_agents, -1),
                 #'td': 1.0#{a:1.0 for a in obs}
             }
-
-            transition = TensorDict(transition,batch_size=[n_agents])
+            transition = TensorDict(transition, batch_size=n_agents)
+            if params['use_state']:
+                transition = TensorDict(transition.unsqueeze(0), batch_size=[1])
+            transition['observations'] = observations
+            transition['next_observations'] = next_observations
             replay_buffer.add(transition)
 
 
@@ -877,7 +905,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'])
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
             if params['prioritize_big_buffer']:
@@ -885,7 +913,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         elif params['rb'] =='likely':
             big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'])
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
@@ -901,7 +929,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             #print("returned sample", samples)
         else:
             sample = replay_buffer.sample()
-            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'])
+            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
         
         if params['rb'] != 'correction':
             samples = [sample for _ in range(n_agents)]
@@ -983,11 +1011,13 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     #api_test(env, num_cycles=1000, verbose_progress=True)
 
     env.reset()
-
-    try:
-        obs_shape = env.observation_space[-1].shape
-    except:
-        obs_shape = env.observation_space(0).shape
+    if params['use_state']:
+        obs_shape = env.observation_space.shape
+    else:
+        try:
+            obs_shape = env.observation_space[-1].shape
+        except:
+            obs_shape = env.observation_space(0).shape
         
     size_obs = int(np.product(obs_shape))
     
@@ -1217,7 +1247,19 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
         return others_current_likelyhood.T, others_past_likelyhood.T
 
 
-def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, writer=None):
+def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, writer=None, use_state=False):
+    
+    n_agents = len(agents)
+    if use_state:
+        sample = sample[:,0]
+        repeated_state = sample['observations'].unsqueeze(1).repeat(1, n_agents, 1)
+        sample['observations'] = repeated_state
+        repeated_next_state = sample['next_observations'].unsqueeze(1).repeat(1, n_agents, 1)
+        sample['next_observations'] = repeated_next_state
+        sample['index'] = sample['index'].unsqueeze(1).repeat(1, n_agents)
+
+    sample = TensorDict(sample, batch_size=[sample.shape[0], n_agents])
+
     td_error = torch.stack([agent.get_td_error(sample[:,id_agent]).to('cpu') for id_agent, agent in enumerate(agents)], dim=1)
     current_likelyhood, past_likelyhood = current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_agent)
     #current_likelyhood, past_likelyhood = current_likelyhood.to(device) , past_likelyhood.to(device) 

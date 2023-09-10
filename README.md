@@ -112,3 +112,10 @@ python src/run_experiments.py --rb laber --prio none cur past --loss-correction-
 
 python src/run_experiments.py --rb laber --prio none cur past --loss-correction-for-others none cur cur-past --nb-runs 3 --env-id water-bomber
 python src/run_experiments.py --rb laber --prio none cur past --loss-correction-for-others none cur cur-past  --nb-runs 100
+
+/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --use-state
+
+python src/run_experiments.py --rb uniform laber likely --prio cur-past --filter cur-past --env-id smac --nb-runs 2
+python src/run_experiments.py --add-epsilon True False  --env-id smac --nb-runs 3
+python src/run_experiments.py --add-others-explo True False --env-id smac --nb-runs 3
+python src/run_experiments.py --rb uniform prioritized laber --env-id smac --nb-runs 2

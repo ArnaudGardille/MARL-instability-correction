@@ -57,5 +57,6 @@ t_max: 100
 prioritize_big_buffer: False
 verbose: False
 state_from_obs: True
-map: 3s_vs_5z
+map: 2s3z
 visualisation: False
+use_state: True
