@@ -88,7 +88,7 @@ def parse_args():
     parser.add_argument("--n-actions", type=int, nargs='*')
     parser.add_argument("--verbose", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--loss-correction-for-others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
-    parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)) , nargs="?")
+    parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*")
     parser.add_argument("--clip-correction-after", type=float, nargs="*")
     parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="*")
     parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")

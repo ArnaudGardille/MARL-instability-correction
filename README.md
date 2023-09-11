@@ -133,4 +133,4 @@ python src/run_experiments.py --rb uniform laber likely --prio cur-past  --filte
 
  python src/run_experiments.py --rb laber --filter  cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer True  --nb-runs 100
 
- python src/run_experiments.py --loss-correction-for-others cur-past --correction-modification none sqrt sigmoid normalize
+ python src/run_experiments.py --loss-correction-for-others cur-past --correction-modification none sqrt sigmoid normalize  --nb-runs 100
