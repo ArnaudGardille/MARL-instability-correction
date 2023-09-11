@@ -38,6 +38,7 @@ import torch.optim as optim
 import smaclite  # noqa
 import pygame
 from collections import Counter
+from torch.nn.functional import sigmoid
 #from stable_baselines3 import DQN
 
 #from stable_baselines3.common.buffers import ReplayBuffer, DictReplayBuffer
@@ -163,7 +164,7 @@ def parse_args():
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
     parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z')
-    parser.add_argument("--sqrt-correction", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*", const=True)
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
     #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
@@ -492,8 +493,14 @@ class QAgent():
                 sample = self.add_ratios(sample, completed_episodes, use_state=params['use_state'])
 
             others_correction = sample[self.loss_correction_for_others]
-            if self.sqrt_correction:
+            
+            if 'sqrt' in self.correction_modification:
                 others_correction = torch.sqrt(others_correction)
+            if 'sigmoid' in self.correction_modification:
+                others_correction = sigmoid(others_correction)
+            if 'normalize' in self.correction_modification:
+                others_correction /= torch.max(others_correction)
+            
             if self.clip_correction_after is not None:
                 others_correction = torch.clip(others_correction, -self.clip_correction_after, self.clip_correction_after)
             weights *= others_correction
@@ -927,9 +934,13 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             big_sample = replay_buffer.sample()
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
+                
+            
+            
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
-
+        
+        
         elif params['rb'] == 'correction':
             #samples = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
             nb_states, nb_transitions = params['batch_size'] // 10, 10

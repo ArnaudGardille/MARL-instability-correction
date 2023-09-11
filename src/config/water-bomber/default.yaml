@@ -53,8 +53,9 @@ prio: 'td_error' #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-
 rb: 'uniform' # choices=['uniform', 'prioritized', 'laber'], default='uniform',
 
 loss_correction_for_others: 'none'
-sqrt_correction: False
+correction_modification: 'none'
 clip_correction_after: 
+
 filter: cur-past
 prioritize_big_buffer: False
 verbose: False
