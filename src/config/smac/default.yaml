@@ -23,7 +23,7 @@ n_actions: 18
 env_id: simultaneous
 random_policy: False
 no_training: False
-total_timesteps: 100000
+total_timesteps: 10000
 learning_rate: 0.001
 buffer_size: 1000000
 gamma: 0.99

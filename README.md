@@ -121,3 +121,14 @@ python src/run_experiments.py --add-others-explo True False --env-id smac --nb-r
 python src/run_experiments.py --rb uniform prioritized laber --env-id smac --nb-runs 2
 
 /home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --single-agent --add-id --env-id smac --map MMM2 --save-model --save-buffer --use-state
+
+python src/run_experiments.py --rb uniform laber likely --prio cur-past  --filter cur-past  --nb-runs 10 --env-id water-bomber
+
+
+ python src/run_experiments.py --rb laber likely --prio td-cur-past  --filter td-cur-past --loss-correction-for-others cur-past  --nb-runs 3 --env-id water-bomber
+ python src/run_experiments.py --rb laber likely --prio td-cur-past  --filter td-cur-past --loss-correction-for-others cur-past   --nb-runs 100
+ --prioritize-big-buffer
+
+ python src/run_experiments.py --rb laber --filter  cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer True --nb-runs 3 --env-id water-bomber
+
+ python src/run_experiments.py --rb laber --filter  cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer True  --nb-runs 100
