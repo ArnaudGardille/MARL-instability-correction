@@ -125,9 +125,10 @@ python src/run_experiments.py --rb uniform prioritized laber --env-id smac --nb-
 python src/run_experiments.py --rb uniform laber likely --prio cur-past  --filter cur-past  --nb-runs 10 --env-id water-bomber
 
 
- python src/run_experiments.py --rb laber likely --prio td-cur-past  --filter td-cur-past --loss-correction-for-others cur-past  --nb-runs 3 --env-id water-bomber
- python src/run_experiments.py --rb laber likely --prio td-cur-past  --filter td-cur-past --loss-correction-for-others cur-past   --nb-runs 100
+ python src/run_experiments.py --rb uniform laber likely --prio td-cur-past  --filter td-cur-past --loss-correction-for-others cur-past --correction-modification sqrt --nb-runs 3 --env-id water-bomber
+ python src/run_experiments.py --rb uniform laber likely --prio td-cur-past  --filter td-cur-past --loss-correction-for-others cur-past  --correction-modification sqrt --nb-runs 100
  --prioritize-big-buffer
+--correction-modification sqrt
 
  python src/run_experiments.py --rb laber --filter  cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer True --nb-runs 3 --env-id water-bomber
 
@@ -136,3 +137,15 @@ python src/run_experiments.py --rb uniform laber likely --prio cur-past  --filte
  python src/run_experiments.py --loss-correction-for-others cur-past --correction-modification none sqrt sigmoid normalize  --nb-runs 100
 
   python src/run_experiments.py --buffer-size 100 1000 10000  --nb-runs 100
+
+  python src/run_experiments.py --rb laber likely --prio cur-past 
+--filter  cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer True  --nb-runs 100 --correction-modification none sqrt
+
+  python src/run_experiments.py --rb laber --prio td-cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer False   --correction-modification none sqrt --nb-runs 100
+
+  python src/run_experiments.py --rb likely --prio cur-past --filter  cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer True  --nb-runs 100 --correction-modification none sqrt
+
+
+   python src/run_experiments.py --rb laber --prio td-cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer False   --correction-modification none sqrt --nb-runs 100
+
+   python src/run_experiments.py --rb laber --prio td-cur-past --loss-correction-for-others cur-past  --prioritize-big-buffer False   --correction-modification none sqrt --nb-runs 3 --env-id water-bomber
