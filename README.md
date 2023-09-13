@@ -154,10 +154,15 @@ python src/run_experiments.py --rb uniform laber likely --prio cur-past  --filte
    python src/run_experiments.py --rb uniform laber likely --prio cur-past  --filter cur-past --loss-correction-for-others none cur cur-past  
 
 
-python src/run_experiments.py --rb likely --prio td-cur-past  --filter cur-past --prioritize-big-buffer True   
+python src/run_experiments.py --rb laber likely --prio td-cur-past  --filter cur-past --prioritize-big-buffer True   
 
 
 python src/run_experiments.py  --buffer-size 5000 7500 --nb-runs 100
 
 python src/run_experiments.py --rb likely --prio td-cur-past  --filter cur-past --prioritize-big-buffer True --nb-runs 100 
 --nb-runs 3 --env-id water-bomber
+
+
+ python src/run_experiments.py --rb uniform prioritized laber --prio td_error 
+
+ python src/run_experiments.py --batch-size 
