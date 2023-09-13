@@ -51,7 +51,7 @@ def parse_args():
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, nargs="*",
         help="the learning rate of the optimizer")
-    parser.add_argument("--buffer-size", type=int,
+    parser.add_argument("--buffer-size", type=int, nargs="*",
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, nargs="*",)
     parser.add_argument("--tau", type=float, help="the target network update rate")

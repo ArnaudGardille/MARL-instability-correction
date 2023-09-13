@@ -488,9 +488,12 @@ class QAgent():
         if self.loss_not_corrected_for_priorisation:
             sample['_weight'] = torch.ones(self.batch_size).to(self.device)
 
+        #epsilon = linear_schedule(self.start_e, self.end_e, self.exploration_fraction * self.total_timesteps , completed_episodes)
+        #sample = add_ratios(sample, completed_episodes, use_state=self.use_state, epsilon=epsilon, single_agent=self.single_agent, writer=self.writer)
+
         if self.loss_correction_for_others not in [None, 'none']:
-            if self.loss_correction_for_others not in sample.keys():
-                sample = self.add_ratios(sample, completed_episodes, use_state=params['use_state'])
+            assert self.loss_correction_for_others in sample.keys()
+            #sample = add_ratios(sample, completed_episodes, use_state=self.use_state, writer=self.writer)
 
             others_correction = sample[self.loss_correction_for_others]
             
@@ -743,7 +746,7 @@ def visualize_trajectory(env, agents, completed_episodes):
     agents[0].writer.add_figure("q_values_imgs", fig, completed_episodes)
 
 
-def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False):
+def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False, writer=None):
     if training:
         assert replay_buffer is not None
         if params['rb'] == 'laber':
@@ -766,7 +769,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     #n_action_mask = n_previous_action_mask
     n_previous_action_mask = None
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
-
+    if not training:
+        epsilon = 0.0
 
     n_obs = torch.tensor(n_obs)
     #n_next_obs = torch.tensor(n_next_obs)
@@ -924,7 +928,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
             if params['prioritize_big_buffer']:
@@ -932,7 +936,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         elif params['rb'] =='likely':
             big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
                 
             
@@ -952,7 +956,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             #print("returned sample", samples)
         else:
             sample = replay_buffer.sample()
-            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'])
+            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
         
         if params['rb'] != 'correction':
             samples = [sample for _ in range(n_agents)]
@@ -1106,12 +1110,12 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     pbar=trange(params['total_timesteps'])
     for completed_episodes in pbar:
         if not params['no_training']:
-            run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False)
+            run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False, writer=writer)
                
 
         if completed_episodes % params['evaluation_frequency'] == 0:
             if params['save_imgs']:
-                run_episode(env, q_agents, completed_episodes, params, training=False, plot_q_values=True)
+                run_episode(env, q_agents, completed_episodes, params, training=False, plot_q_values=True, writer=writer)
             
             list_total_reward = []
             average_duration = 0.0
