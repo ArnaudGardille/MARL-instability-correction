@@ -7,7 +7,6 @@ track: False
 display_video: False
 capture_video: False
 save_model: True
-use_state: False
 save_buffer: False
 load_buffer: False
 save_imgs: False
@@ -53,7 +52,7 @@ loss_correction_for_others: 'none'
 clip_correction_after: 
 correction_modification: 'none'
 filter: cur-past
-t_max: 60
+t_max: 200
 prioritize_big_buffer: False
 verbose: False
 state_from_obs: True

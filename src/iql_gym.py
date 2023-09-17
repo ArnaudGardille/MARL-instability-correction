@@ -540,15 +540,14 @@ class QAgent():
         loss.backward()
         self.optimizer.step()
 
-        if self.save_model:
-            self.save()
 
         return td_error.cpu().detach().numpy()
 
     
 
-    def save(self):
-        model_path = Path.cwd() / 'runs' / self.experiment_hash / "{self.agent_id}.cleanrl_model"
+    def save(self, path):
+        #model_path = Path.cwd() / 'runs' / self.experiment_hash / f"{self.agent_id}.cleanrl_model"
+        model_path = path / f"{self.agent_id}.iql_model"
         os.makedirs("runs/"+self.experiment_hash+"/saved_models", exist_ok=True)
         torch.save(self.q_network.state_dict(), model_path)
         #print(f"model saved to {model_path}")
@@ -1170,8 +1169,13 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         }
     result_df = pd.DataFrame(results_dict)
 
+
     os.makedirs(path / run_name, exist_ok=True)
     #assert str(dict_hash(params)) == experiment_hash, params
+    if params['save_model']:
+        for agent in q_agents:
+            agent.save(path/ run_name)
+    
     with open(path/ run_name/'params.yaml', 'w') as f:
         yaml.dump(params, f, default_flow_style=False)
 
