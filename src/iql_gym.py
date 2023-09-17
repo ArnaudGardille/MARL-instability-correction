@@ -1073,7 +1073,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     
 
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'])
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/"runs"/run_name)
 
 
     ### Creating Agents
@@ -1187,9 +1187,12 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     assert dict_hash(params) == dict_hash(old_params), (params, old_params)
     return steps, results
 
-def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False):
+def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False, path=None):
     smaller_buffer = None
-    rb_storage = LazyTensorStorage(buffer_size, device='cpu')
+    if path is not None:
+        rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
+    else:
+        rb_storage = LazyTensorStorage(buffer_size, device='cpu')
     if rb_type == 'uniform' or rb_type == 'correction':
         replay_buffer = TensorDictReplayBuffer(
             #replay_buffer = TensorDictReplayBuffer(
