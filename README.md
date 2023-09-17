@@ -166,3 +166,5 @@ python src/run_experiments.py --rb likely --prio td-cur-past  --filter cur-past 
  python src/run_experiments.py --rb uniform prioritized laber --prio td_error 
 
  python src/run_experiments.py --batch-size 
+
+/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --save-model --env-id smac --n-agents 5 --buffer-size 10000000 --total-timesteps 100000 --device cuda
