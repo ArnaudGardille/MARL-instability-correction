@@ -167,4 +167,13 @@ python src/run_experiments.py --rb likely --prio td-cur-past  --filter cur-past 
 
  python src/run_experiments.py --batch-size 
 
-/home/nono/.conda/envs/torch_rl/bin/python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --save-model --env-id smac --n-agents 5 --buffer-size 10000000 --total-timesteps 100000 --device cuda
+python src/iql_gym.py --save-model --env-id smac --n-agents 5 --buffer-size 10000000 --total-timesteps 100000 --device cuda
+python iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000
+
+python iql_gym.py --env-id smac --n-agents 5 --no-training --load-agents-from test --visualisation
+
+python iql_gym.py  --total-timesteps 10 --save-model --env-id smac --total-timesteps 100000 --map MMM2 --buffer-size 10000000
+
+python iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --total-timesteps 100000 --buffer-size 10000000 --map MMM2
+
+--map 27m_vs_30m --single-agent

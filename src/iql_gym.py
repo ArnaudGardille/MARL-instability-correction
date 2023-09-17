@@ -6,6 +6,7 @@ from torch.distributions.categorical import Categorical
 
 from gym import Wrapper, ObservationWrapper
 from gym.spaces import MultiDiscrete, Box
+import datetime
 
 import random
 import yaml
@@ -548,12 +549,12 @@ class QAgent():
     def save(self, path):
         #model_path = Path.cwd() / 'runs' / self.experiment_hash / f"{self.agent_id}.cleanrl_model"
         model_path = path / f"{self.agent_id}.iql_model"
-        os.makedirs("runs/"+self.experiment_hash+"/saved_models", exist_ok=True)
+        
         torch.save(self.q_network.state_dict(), model_path)
         #print(f"model saved to {model_path}")
 
     def load(self, model_path):
-        model_path = Path.cwd() / 'runs' / self.experiment_hash / "{self.agent_id}.cleanrl_model"
+        print("model_path", model_path)
         self.q_network.load_state_dict(torch.load(model_path))
         print(f"model sucessfullt loaded from to {model_path}")
         
@@ -1014,7 +1015,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     #    params['run_name'] = f"iql_{int(time.time())}"
     
 
-    writer = SummaryWriter(path/"runs"/run_name)
+    writer = SummaryWriter(path/run_name) #
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
@@ -1073,16 +1074,17 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     
 
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/"runs"/run_name)
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name)
 
 
     ### Creating Agents
 
     q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
+
     
     if params['load_agents_from'] is not None:
         for name, agent in enumerate(q_agents):
-            model_path = f"runs/{params['load_agents_from']}/saved_models/{name}.cleanrl_model"
+            model_path = path / f"{params['load_agents_from']}/saved_models/{name}.iql_model"
             agent.load(model_path)
             
     if params['load_buffer_from'] is not None:
@@ -1173,8 +1175,10 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     os.makedirs(path / run_name, exist_ok=True)
     #assert str(dict_hash(params)) == experiment_hash, params
     if params['save_model']:
+        model_path = path/ run_name / 'saved_models'
+        os.makedirs(model_path, exist_ok=True)
         for agent in q_agents:
-            agent.save(path/ run_name)
+            agent.save(model_path)
     
     with open(path/ run_name/'params.yaml', 'w') as f:
         yaml.dump(params, f, default_flow_style=False)
@@ -1190,6 +1194,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False, path=None):
     smaller_buffer = None
     if path is not None:
+        print("Replay buffer location:", path/'replay_buffer')
         rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
     else:
         rb_storage = LazyTensorStorage(buffer_size, device='cpu')
@@ -1337,7 +1342,8 @@ def main(**params):
     #for n_agents in range(1,10):
     #params["n_agents"] = n_agents
     #params["run_name"] = str(n_agents)
-    params["run_name"] = "test"
+    params["run_name"]= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
+
     steps, results = run_training(**params)
 
     wandb.finish()
