@@ -601,7 +601,7 @@ class QAgent():
         actions = sample['actions']
 
         if self.params['add_id']: 
-            batch_id = self.one_hot_id.repeat(4*self.params['batch_size'], 1)
+            batch_id = self.one_hot_id.repeat(sample.shape[0], 1) #4*self.params['batch_size']
             obs = torch.cat((obs, batch_id), dim=-1).float()
             next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
         
@@ -1272,7 +1272,7 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
             old_probability = sample['actions_likelihood'][:,agent_id]
 
             if agent.params['add_id']: 
-                batch_id = agent.one_hot_id.repeat(agent.params['batch_size'], 1)
+                batch_id = agent.one_hot_id.repeat(sample.shape[0], 1)
                 obs = torch.cat((obs, batch_id), dim=-1).float()
                 next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
 
@@ -1316,6 +1316,8 @@ def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, w
         repeated_next_state = sample['next_observations'].unsqueeze(1).repeat(1, n_agents, 1)
         sample['next_observations'] = repeated_next_state
         sample['index'] = sample['index'].unsqueeze(1).repeat(1, n_agents)
+        if '_weight' in sample.keys():
+            sample['_weight'] = sample['_weight'].unsqueeze(1).repeat(1, n_agents)
 
     sample = TensorDict(sample, batch_size=[sample.shape[0], n_agents])
 
