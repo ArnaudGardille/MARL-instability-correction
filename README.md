@@ -169,11 +169,14 @@ python src/run_experiments.py --rb likely --prio td-cur-past  --filter cur-past 
 
 python src/iql_gym.py --save-model --env-id smac --n-agents 5 --buffer-size 10000000 --total-timesteps 100000 --device cuda
 python iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000
+python src/iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000 --buffer-size 10000000
 
-python iql_gym.py --env-id smac --n-agents 5 --no-training --load-agents-from test --visualisation
+python src/iql_gym.py --env-id smac --n-agents 5 --no-training --load-agents-from test --visualisation
 
-python iql_gym.py  --total-timesteps 10 --save-model --env-id smac --total-timesteps 100000 --map MMM2 --buffer-size 10000000
+python src/iql_gym.py  --save-model --env-id smac --total-timesteps 100000 --map MMM2 --buffer-size 10000000
 
-python iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --total-timesteps 100000 --buffer-size 10000000 --map MMM2
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 10000000 --map MMM2
 
 --map 27m_vs_30m --single-agent
+
+python src/iql_gym.py --save-model --env-id smac --total-timesteps 10000 --buffer-size 1000000 --map 10m_vs_11m --single-agent  --n-agents 10 --load-agents-from 2023-09-18_02:00:55

@@ -354,7 +354,6 @@ def collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_b
 
 
 
-
 class QAgent():
     def __init__(self, env, agent_id, params, obs_shape, act_shape, writer, experiment_hash=None):
         for k, v in params.items():
@@ -373,6 +372,9 @@ class QAgent():
         self.env = env
 
         self.agent_id  = agent_id
+
+        self.one_hot_id = torch.eye(params['n_agents'])[agent_id]
+
         try:
             self.action_space = env.action_space[agent_id]
         except:
@@ -384,6 +386,8 @@ class QAgent():
         else:
             network_class=QNetwork
 
+        if self.params['add_id']:  
+            obs_shape += len(self.one_hot_id)
         self.q_network = network_class(obs_shape, act_shape).to(self.device)
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
         self.target_network = network_class(obs_shape, act_shape).to(self.device)
@@ -433,6 +437,10 @@ class QAgent():
         return probability.cpu()
 
     def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
+        if self.params['add_id']:   
+            obs = torch.cat((obs, self.one_hot_id), dim=-1).float()
+        
+        
         with torch.no_grad():
             obs = torch.Tensor(obs).float()
             
@@ -473,6 +481,10 @@ class QAgent():
         dones = sample['dones']
         actions = sample['actions']
 
+        if self.params['add_id']: 
+            batch_id = self.one_hot_id.repeat(self.params['batch_size'], 1)
+            obs = torch.cat((obs, batch_id), dim=-1).float()
+            next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
 
         #assert next_observations[0][-2] == self.agent_id
         assert torch.all(torch.sum(action_mask, 1) >0), (obs,action_mask)
@@ -562,18 +574,7 @@ class QAgent():
         pprint(self.__dict__)
         return ""
     
-    def save_rb(self):
-        #buffer_path = f"runs/{params['run_name']}/saved_models/{self.agent_id}_buffer.pkl"
-        #save_to_pkl(buffer_path, self.replay_buffer)
-        env_type = "_det" if self.deterministic_env else "_rd"
-        add_eps = "_eps" if self.add_epsilon else ""
-        add_expl = "_expl" if self.add_others_explo else ""
 
-        path = Path.cwd() / 'rbs' / Path(str(self.agent_id)+env_type+add_eps+add_expl+'_replay_buffer.pickle')
-        with open(path, 'wb') as handle:
-            pickle.dump(self.replay_buffer[:], handle)
-        
-        #self.rb_storage[:]
 
     def load_rb(self):
         #self.replay_buffer = load_from_pkl(buffer_path)
@@ -599,6 +600,10 @@ class QAgent():
         dones = sample['dones']
         actions = sample['actions']
 
+        if self.params['add_id']: 
+            batch_id = self.one_hot_id.repeat(4*self.params['batch_size'], 1)
+            obs = torch.cat((obs, batch_id), dim=-1).float()
+            next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
         
         with torch.no_grad():
             target_max, _ = (self.target_network(next_obs)*next_action_mask).max(dim=1)
@@ -1074,7 +1079,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     
 
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name)
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name if params['save_buffer'] else None)
 
 
     ### Creating Agents
@@ -1152,14 +1157,10 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     visu_env.close()
 
     if params['save_buffer']:
-        for agent in q_agents:
-            env_type = "_det" if params["deterministic_env"] else "_rd"
-            add_eps = "_eps" if params["add_epsilon"] else ""
-            add_expl = "_expl" if params["add_others_explo"] else ""
-
-            rb_path = Path.cwd() / 'rbs' / Path(params["env_id"]+env_type+add_eps+add_expl+'_replay_buffer.pickle')
-            with open(rb_path, 'wb') as handle:
-                pickle.dump(replay_buffer[:], handle)
+        rb_path = path/ run_name / 'replay_buffer.pickle'
+        with open(rb_path, 'wb') as handle:
+            pickle.dump(replay_buffer[:], handle)
+        print("Replay buffer saved to", rb_path)
             
 
 
@@ -1179,6 +1180,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         os.makedirs(model_path, exist_ok=True)
         for agent in q_agents:
             agent.save(model_path)
+
+    
     
     with open(path/ run_name/'params.yaml', 'w') as f:
         yaml.dump(params, f, default_flow_style=False)
@@ -1268,6 +1271,11 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
             actions = sample['actions'][:, agent_id]
             old_probability = sample['actions_likelihood'][:,agent_id]
 
+            if agent.params['add_id']: 
+                batch_id = agent.one_hot_id.repeat(agent.params['batch_size'], 1)
+                obs = torch.cat((obs, batch_id), dim=-1).float()
+                next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
+
             with torch.no_grad():
                     
                 q_values = agent.q_network(obs)
@@ -1342,7 +1350,9 @@ def main(**params):
     #for n_agents in range(1,10):
     #params["n_agents"] = n_agents
     #params["run_name"] = str(n_agents)
-    params["run_name"]= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
+    print("params", params)
+    if params["run_name"] is None:
+        params["run_name"]= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 
     steps, results = run_training(**params)
 
