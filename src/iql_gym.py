@@ -96,10 +96,10 @@ def parse_args():
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--load-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to save images of the V or Q* functions")
     parser.add_argument("--run-name", type=str, default=None)
+    parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     
 
     # Environment specific arguments
@@ -751,6 +751,59 @@ def visualize_trajectory(env, agents, completed_episodes):
     agents[0].writer.add_figure("q_values_imgs", fig, completed_episodes)
 
 
+def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, training, writer):
+    epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
+    n_agents = len(q_agents)
+    
+    if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
+        
+        if params['rb'] =='laber':
+            # On met a jour les TD errors 
+            big_sample = replay_buffer.sample()
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
+            smaller_buffer.extend(big_sample)
+            sample = smaller_buffer.sample()
+            if params['prioritize_big_buffer']:
+                replay_buffer.update_tensordict_priority(big_sample)
+
+        elif params['rb'] =='likely':
+            big_sample = replay_buffer.sample()
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
+            sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
+                
+            
+            
+            if params['prioritize_big_buffer']:
+                replay_buffer.update_tensordict_priority(big_sample)
+        
+        else:
+            sample = replay_buffer.sample()
+            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
+        
+        if params['rb'] != 'correction':
+            samples = [sample for _ in range(n_agents)]
+        td_errors = []
+        for agent_id, (agent, sample) in enumerate(zip(q_agents, samples)):
+            
+            agent_td_error = agent.train(sample[:,agent_id], completed_episodes)
+            td_errors.append(agent_td_error)
+        #print(np.array(td_errors).shape)
+
+        if params['rb'] == 'prioritized':
+            sample.set("td_error", torch.tensor(td_errors).T)
+            replay_buffer.update_tensordict_priority(sample)    
+
+    # update target network
+    for agent in q_agents:
+        if completed_episodes % agent.target_network_frequency == 0:
+            for target_network_param, q_network_param in zip(agent.target_network.parameters(), agent.q_network.parameters()):
+                target_network_param.data.copy_(
+                    agent.tau * q_network_param.data + (1.0 - agent.tau) * target_network_param.data
+                )
+
+    return q_agents
+
+
 def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False, writer=None):
     if training:
         assert replay_buffer is not None
@@ -888,8 +941,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         episode_reward += np.mean(n_reward)
 
 
-        if training:
-            
+        #if training: On ajoute au rb meme quand on explore pas
+
+        if replay_buffer is not None and not params['fixed_buffer']:    
             for previous_action_mask, action_mask in zip(n_previous_action_mask, n_action_mask):
                 assert sum(previous_action_mask) > 0 
                 assert sum(action_mask) > 0 
@@ -917,72 +971,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             transition['next_observations'] = next_observations
             replay_buffer.add(transition)
 
-
-        if verbose:
-            print("actions:", actions)
-            print("probabilities:", probabilities)
-            print("next_obs:", n_next_obs)
-            print("reward:", reward)
-
         nb_steps += 1
         n_obs = n_next_obs
         terminated = n_terminated[0] or nb_steps > params['t_max']
-
-    if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
-        
-        if params['rb'] =='laber':
-            # On met a jour les TD errors 
-            big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
-            smaller_buffer.extend(big_sample)
-            sample = smaller_buffer.sample()
-            if params['prioritize_big_buffer']:
-                replay_buffer.update_tensordict_priority(big_sample)
-
-        elif params['rb'] =='likely':
-            big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
-            sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
-                
-            
-            
-            if params['prioritize_big_buffer']:
-                replay_buffer.update_tensordict_priority(big_sample)
-        
-        
-        elif params['rb'] == 'correction':
-            #samples = get_correclty_sampled_transitions(q_agents, epsilon, nb_transitions, replay_buffer)
-            nb_states, nb_transitions = params['batch_size'] // 10, 10
-            samples = collate_n_state_batch(nb_states, nb_transitions, q_agents, epsilon, replay_buffer)
-            samples = samples.reshape([params['batch_size']] + list(samples.shape[2:]))
-
-            samples = torch.permute(samples, [1, 0, 2])
-
-            #print("returned sample", samples)
-        else:
-            sample = replay_buffer.sample()
-            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
-        
-        if params['rb'] != 'correction':
-            samples = [sample for _ in range(n_agents)]
-        td_errors = []
-        for agent_id, (agent, sample) in enumerate(zip(q_agents, samples)):
-            
-            agent_td_error = agent.train(sample[:,agent_id], completed_episodes)
-            td_errors.append(agent_td_error)
-        #print(np.array(td_errors).shape)
-
-        if params['rb'] == 'prioritized':
-            sample.set("td_error", torch.tensor(td_errors).T)
-            replay_buffer.update_tensordict_priority(sample)    
-
-    # update target network
-    for agent in q_agents:
-        if completed_episodes % agent.target_network_frequency == 0:
-            for target_network_param, q_network_param in zip(agent.target_network.parameters(), agent.q_network.parameters()):
-                target_network_param.data.copy_(
-                    agent.tau * q_network_param.data + (1.0 - agent.tau) * target_network_param.data
-                )
 
     return nb_steps, episode_reward #episodic_returns
     
@@ -1078,8 +1069,11 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         print('-'*20)
 
     
-
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name if params['save_buffer'] else None)
+    if params['load_buffer_from'] is not None:
+        rb_path = Path(params['load_buffer_from'])
+    else:
+        rb_path = path
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=rb_path/run_name if params['save_buffer'] else None)
 
 
     ### Creating Agents
@@ -1091,11 +1085,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         for name, agent in enumerate(q_agents):
             model_path = path / f"{params['load_agents_from']}/saved_models/{name}.iql_model"
             agent.load(model_path)
-            
-    if params['load_buffer_from'] is not None:
-        for name, agent in enumerate(q_agents):
-            buffer_path = f"runs/{params['load_buffer_from']}/saved_models/{name}_buffer.pkl"
-            agent.load_buffer(buffer_path)
 
     if params['single_agent']:
         agent_0 = q_agents[0]
@@ -1117,11 +1106,13 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     for completed_episodes in pbar:
         if not params['no_training']:
             run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False, writer=writer)
+            q_agents = training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, True, writer)
+
                
 
         if completed_episodes % params['evaluation_frequency'] == 0:
             if params['save_imgs']:
-                run_episode(env, q_agents, completed_episodes, params, training=False, plot_q_values=True, writer=writer)
+                run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, plot_q_values=True, writer=writer)
             
             list_total_reward = []
             average_duration = 0.0
@@ -1129,9 +1120,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             for eval in range(params['evaluation_episodes']):
                 
                 if params['visualisation'] and eval==0:
-                    nb_steps, total_reward = run_episode(visu_env, q_agents, completed_episodes, params, training=False, visualisation=True)
+                    nb_steps, total_reward = run_episode(visu_env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, visualisation=True)
                 else:
-                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, training=False, visualisation=False)
+                    nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, visualisation=False)
 
                 list_total_reward.append(total_reward)
                 average_duration += nb_steps
