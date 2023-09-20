@@ -135,6 +135,7 @@ env.bak/
 venv.bak/
 wandb/
 logs/
+*.zip
 
 # Spyder project settings
 .spyderproject

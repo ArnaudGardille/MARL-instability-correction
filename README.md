@@ -182,3 +182,5 @@ python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buf
 python src/iql_gym.py --save-model --env-id smac --total-timesteps 10000 --buffer-size 1000000 --map 10m_vs_11m --single-agent  --n-agents 10 --load-agents-from 2023-09-18_02:00:55
 
 python src/run_experiments.py --rb uniform laber --batch-size 32 128
+
+python src/iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000 --buffer-size 15000000 --save-buffer

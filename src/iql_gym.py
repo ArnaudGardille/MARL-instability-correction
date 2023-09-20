@@ -1350,7 +1350,6 @@ def main(**params):
     #for n_agents in range(1,10):
     #params["n_agents"] = n_agents
     #params["run_name"] = str(n_agents)
-    print("params", params)
     if params["run_name"] is None:
         params["run_name"]= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 
