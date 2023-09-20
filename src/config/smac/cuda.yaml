@@ -59,3 +59,4 @@ map: 2s3z
 visualisation: False
 use_state: True
 fixed_buffer: False
+buffer_on_disk: False

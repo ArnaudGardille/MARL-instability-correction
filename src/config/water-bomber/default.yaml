@@ -60,3 +60,4 @@ prioritize_big_buffer: False
 verbose: False
 visualisation: False
 fixed_buffer: False
+buffer_on_disk: False
