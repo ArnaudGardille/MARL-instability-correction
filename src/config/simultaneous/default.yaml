@@ -9,7 +9,6 @@ capture_video: False
 save_model: True
 use_state: False
 save_buffer: False
-load_buffer: False
 save_imgs: False
 load_agents_from: 
 load_buffer_from: 
@@ -59,3 +58,4 @@ prioritize_big_buffer: False
 t_max: 1
 verbose: False
 visualisation: False
+fixed_buffer: False

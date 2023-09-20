@@ -8,7 +8,6 @@ save_model: True
 upload_model: False
 use_state: False
 save_buffer: False
-load_buffer: False
 save_imgs: False
 load_agents_from: 
 load_buffer_from: 
@@ -60,3 +59,4 @@ filter: cur-past
 prioritize_big_buffer: False
 verbose: False
 visualisation: False
+fixed_buffer: False

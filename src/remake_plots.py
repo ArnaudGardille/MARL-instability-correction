@@ -29,7 +29,8 @@ def parse_args():
     return args
 args = parse_args()
 
-name = args.name.replace('/', ':')
+#name = args.name.replace('/', ':')
+name = args.name
 path = Path.cwd() / 'results' / name
 
 plt.rcParams['figure.dpi'] = 300
