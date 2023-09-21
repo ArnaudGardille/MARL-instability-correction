@@ -64,3 +64,12 @@ If you want to modify things in the explerience forlder and re-make the plots, u
 ```
 python src/remake_plots.py --experience-name test                 
 ```
+
+
+
+
+python src/run_experiments.py  --env-id  lbf --enforce-coop True False  --rb uniform laber likely --prio cur-past --add-epsilon --add-others-explo
+
+ --env-id  lbf --enforce-coop True False --save-buffer --s
+ython src/run_experiments.py  --env-id  lbf --enforce-coop True False -
+-save-buffer --save-model --rb uniform laber likely --prio cur-past

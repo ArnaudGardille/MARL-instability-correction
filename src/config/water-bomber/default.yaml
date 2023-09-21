@@ -62,3 +62,4 @@ visualisation: False
 fixed_buffer: False
 buffer_on_disk: False
 plot_q_values: False
+enforce_coop: True

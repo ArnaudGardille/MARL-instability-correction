@@ -3,6 +3,7 @@ from myenvs.water_bomber import *
 from torch.distributions.categorical import Categorical
 import torchsnapshot
 import shutil
+import lbforaging
 
 from gym import Wrapper, ObservationWrapper
 from gym.spaces import MultiDiscrete, Box
@@ -59,8 +60,7 @@ scale = 0.25
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac'] ,default='simultaneous',
-        help="the id of the environment")
+    
     parser.add_argument("--seed", type=int,
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -84,6 +84,10 @@ def parse_args():
     
 
     # Environment specific arguments
+    parser.add_argument("--enforce-coop", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="Coop version for lbf, and mix up rewards for simultaneous")
+    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac', 'lbf'] ,default='simultaneous',
+        help="the id of the environment")
     parser.add_argument("--x-max", type=int, help="Only for the water-bomber env")
     parser.add_argument("--y-max", type=int, help="Only for the water-bomber env")
     parser.add_argument("--t-max", type=int, help="Maximum episode duration")
@@ -216,12 +220,17 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 def create_env(env_id, params):
     if env_id == 'simultaneous':
-        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])
+        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'], common_reward=params['enforce_coop'])
     elif env_id == 'water-bomber':
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
         env = gym.make(f"smaclite/"+params['map'])
-        
+    elif env_id == 'lbf':
+        n_agents = str(params['n_agents'])
+        coop = 'coop-' if params['enforce_coop'] else ''
+        env_name = "Foraging-5x5-"+n_agents+"p-"+n_agents+"f-"+coop+"v2"
+        print("env_name:", env_name)
+        env = gym.make(env_name)
     else:
         raise NameError('Unknown env:'+env_id)
     
@@ -559,7 +568,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     n_action_mask = info['avail_actions']
     n_agents = len(q_agents)
     terminated = False
-    episode_reward = 0
+    episode_reward = np.zeros((n_agents,))
     nb_steps = 0
     n_next_obs = None
     n_previous_action_mask = None
@@ -658,8 +667,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             print("n_terminated", n_terminated)
             print("n_action_mask", n_action_mask)
             print()
-        episode_reward += np.mean(n_reward)
 
+        episode_reward += n_reward
 
         #if training: On ajoute au rb meme quand on explore pas
 
@@ -819,7 +828,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             if params['plot_q_values']:
                 run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, plot_q_values=True, writer=writer)
             
-            list_total_reward = []
+            #list_total_reward = []
+            agents_total_rewards = []
+            #[[] for a in range(n_agents)]
             average_duration = 0.0
 
             for eval in range(params['evaluation_episodes']):
@@ -829,11 +840,27 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
                 else:
                     nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, visualisation=False)
 
-                list_total_reward.append(total_reward)
+                #for a in range(n_agents):
+                agents_total_rewards.append(total_reward)
+                #episode_reward += np.mean(n_reward)
+                #average_reward 
+                #list_total_reward.append(list(n_reward))
                 average_duration += nb_steps
             
             average_duration /= params['evaluation_episodes']
-            average_return = np.mean(list_total_reward)
+            agents_total_rewards = np.array(agents_total_rewards)
+            agents_total_rewards = np.mean(agents_total_rewards, axis=0).squeeze()
+
+            for a in range(len(q_agents)):
+                writer.add_scalar(str(a)+"/Average Return", agents_total_rewards[a], completed_episodes)
+                
+            if params['env_id'] == 'lbf':
+                average_return = np.sum(agents_total_rewards)
+            else:
+                average_return = np.mean(agents_total_rewards)
+
+            writer.add_scalar("Average Return", average_return, completed_episodes)
+            average_return = np.mean(agents_total_rewards)
 
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             writer.add_scalar("Average Return", average_return, completed_episodes)
