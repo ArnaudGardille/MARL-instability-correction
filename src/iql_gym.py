@@ -1,9 +1,7 @@
-from myenvs.simultaneous_attack import *
-from myenvs.water_bomber import *
+#from myenvs.water_bomber import *
 from torch.distributions.categorical import Categorical
 import torchsnapshot
 import shutil
-import lbforaging
 
 from gym import Wrapper, ObservationWrapper
 from gym.spaces import MultiDiscrete, Box
@@ -33,7 +31,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import smaclite  
 import pygame
 from collections import Counter
 from torch.nn.functional import sigmoid
@@ -220,12 +217,16 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 def create_env(env_id, params):
     if env_id == 'simultaneous':
+        from myenvs.simultaneous_attack import SimultaneousEnv
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'], common_reward=params['enforce_coop'])
     elif env_id == 'water-bomber':
+        from myenvs.water_bomber import WaterBomberEnv
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
+        import smaclite  
         env = gym.make(f"smaclite/"+params['map'])
     elif env_id == 'lbf':
+        import lbforaging
         n_agents = str(params['n_agents'])
         coop = 'coop-' if params['enforce_coop'] else ''
         env_name = "Foraging-5x5-"+n_agents+"p-"+n_agents+"f-"+coop+"v2"
@@ -348,6 +349,7 @@ class QAgent():
         reward = sample['rewards']
         dones = sample['dones']
         actions = sample['actions']
+        weights = sample['weights']
 
         if self.params['add_id']: 
             batch_id = self.one_hot_id.repeat(self.params['batch_size'], 1)
@@ -362,7 +364,7 @@ class QAgent():
             td_target = reward.flatten() + self.gamma * target_max * (1 - dones.flatten())
         old_val = (self.q_network(obs)*action_mask).gather(1, actions).squeeze()
 
-        weights = torch.ones(self.batch_size).to(self.device)
+        #weights = torch.ones(self.batch_size).to(self.device)
         
         if self.loss_correction_for_others not in [None, 'none']:
             assert self.loss_correction_for_others in sample.keys()
@@ -532,10 +534,19 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             sample = replay_buffer.sample()
             sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
-        if params['rb'] != 'correction':
-            samples = [sample for _ in range(n_agents)]
+        #samples = [sample for _ in range(n_agents)]
+        weights = torch.ones((len(sample),))
+
+        if '_weight' in sample.keys():
+            weights = sample['_weight']
+        
+        weights = weights.sum()/weights
+        weights /= weights.max()
+
+        sample['weights'] = weights.repeat((n_agents, 1)).T
+
         td_errors = []
-        for agent_id, (agent, sample) in enumerate(zip(q_agents, samples)):
+        for agent_id, agent in enumerate(q_agents):
             
             agent_td_error = agent.train(sample[:,agent_id], completed_episodes)
             td_errors.append(agent_td_error)
