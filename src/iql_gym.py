@@ -89,7 +89,7 @@ def parse_args():
     parser.add_argument("--t-max", type=int, help="Maximum episode duration")
     parser.add_argument("--n-agents", type=int)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z'
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s_vs_1sc'
         ,help="Select the map when using SMAC")
     # Algorithm specific arguments
     parser.add_argument("--load-agents-from", type=str, default=None,

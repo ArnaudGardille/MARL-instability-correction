@@ -55,7 +55,7 @@ t_max: 200
 prioritize_big_buffer: False
 verbose: False
 state_from_obs: True
-map: 2s3z
+map: 2s_vs_1sc
 visualisation: False
 use_state: True
 fixed_buffer: False
