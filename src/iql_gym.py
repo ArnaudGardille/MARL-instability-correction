@@ -17,8 +17,6 @@ import pickle
 import pandas as pd 
 import sys
 import wandb
-from dict_hash import dict_hash
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqnpy
 import argparse
 import os
 from pathlib import Path
@@ -34,14 +32,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import smaclite  # noqa
+import smaclite  
 import pygame
 from collections import Counter
 from torch.nn.functional import sigmoid
-#from stable_baselines3 import DQN
-
-#from stable_baselines3.common.buffers import ReplayBuffer, DictReplayBuffer
-#from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 
 #from smac.env.pettingzoo import StarCraft2PZEnv
 from torch.utils.tensorboard import SummaryWriter
@@ -66,7 +60,6 @@ scale = 0.25
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    #parser.add_argument("--env-id", default='Water-bomber-v1',
     parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac'] ,default='simultaneous',
         help="the id of the environment")
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
@@ -77,22 +70,13 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="whether to capture videos of the agent performances (check out `videos` folder)")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model into the `runs/{run_name}` folder")
-    parser.add_argument("--upload-model", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="whether to upload the saved model to huggingface")
-    parser.add_argument("--hf-entity", type=str, default="",
-        help="the user or org name of the model repository from the Hugging Face Hub")
-    
     parser.add_argument("--plot-q-values", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True, default=False)
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--save-imgs", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="whether to save images of the V or Q* functions")
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--buffer-on-disk", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
@@ -154,9 +138,6 @@ def parse_args():
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
     parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
@@ -164,12 +145,8 @@ def parse_args():
     parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*")
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
-    #parser.add_argument("--multi-agents-correction", choices=['add_epsilon', 'add_probabilities', 'predict_probabilities'])
-    parser.add_argument("--predict-others-likelyhood", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     args = parser.parse_args()
-    # fmt: on
-    #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
 
     return args
 
@@ -379,8 +356,6 @@ class QAgent():
 
         weights = torch.ones(self.batch_size).to(self.device)
         
-        if self.loss_not_corrected_for_priorisation:
-            sample['_weight'] = torch.ones(self.batch_size).to(self.device)
 
         if self.loss_correction_for_others not in [None, 'none']:
             assert self.loss_correction_for_others in sample.keys()
@@ -854,7 +829,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
         # Evaluation episode
         if completed_episodes % params['evaluation_frequency'] == 0:
-            if params['save_imgs']:
+            if params['plot_q_values']:
                 run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, plot_q_values=True, writer=writer)
             
             list_total_reward = []
