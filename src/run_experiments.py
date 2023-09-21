@@ -1,6 +1,3 @@
-#NB_RUNS = 3
-
-#from iql import run_training
 from iql_gym import run_training
 import pandas as pd 
 import matplotlib.pyplot as plt
@@ -16,11 +13,8 @@ import yaml
 sns.set_theme(style="darkgrid")
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
-#import warnings
-#warnings.filterwarnings("ignore")
 
 def parse_args():
-    # fmt: off
     parser = argparse.ArgumentParser()
     parser.add_argument("--load-buffer", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--run-name", type=str, default=None)
@@ -32,7 +26,6 @@ def parse_args():
     parser.add_argument("--t-max", type=int)
     parser.add_argument("--n-agents", type=int, nargs="*")
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="*")
-    #parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--num-envs", type=int,
         help="the number of parallel game environments")
     parser.add_argument("--nb-runs", type=int, default=3)
@@ -75,23 +68,17 @@ def parse_args():
         help="whether to use a single network for all agents. Identity is the added to observation")
     parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
         help="whether to add agents identity to observation")
-    #parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", help="whether to add epsilon to observation")
     parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , nargs="*", help="whether to add epsilon to observation")
-    #parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="*")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="*", 
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
-    parser.add_argument("--boltzmann-policy", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
-    #parser.add_argument("--loss-corrected-for", choices=['others', 'priorisation'], nargs="*")
-    #parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--n-actions", type=int, nargs='*')
     parser.add_argument("--verbose", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--loss-correction-for-others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
     parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*")
     parser.add_argument("--clip-correction-after", type=float, nargs="*")
     parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--loss-corrected-for-others", type=lambda x: bool(strtobool(x)) , nargs="*")
     parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="*")
     parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
     parser.add_argument("--loss_correction_for_others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
@@ -100,8 +87,6 @@ def parse_args():
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
     parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="*")
     args = parser.parse_args()
-    # fmt: on
-    #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
 
     return args
 args = parse_args()
@@ -135,15 +120,12 @@ def product_dict(**kwargs):
 
 params_list_choices_dicts = list(product_dict(**params_list_choice))
 
-#params_list_choices_dicts['total_timesteps'] = 1000
 test_params = {
     'rb': 'laber',
     'evaluation_frequency':100,
     'total_timesteps': 1000,
     'evaluation_episodes':100,
 }
-
-
 
 modified_params = [None, None]
 
@@ -154,9 +136,6 @@ for k, v in params_list_choice.items():
         modified_params[i] = k
         i += 1
 
-#print("modified_params:", modified_params)
-
-#experiment_name = '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() )
 experiment_name= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 for k in params_const:
     experiment_name += '-' + str(k)
@@ -170,7 +149,6 @@ os.makedirs(path, exist_ok=True)
 results_df = []
 for run in range(args.nb_runs):
     print("Run", run)
-    #print('params_list_choices_dicts:', params_list_choices_dicts)
 
     for params_choice in params_list_choices_dicts:
         run_name= "" 
@@ -180,11 +158,6 @@ for run in range(args.nb_runs):
             run_name += str(k)+':'+str(params_choice[k]) + "/"
         run_name += str(run)
         print("Run name:", run_name)
-        #pbar.set_description("Run name: "+run_name) #, Duration={average_duration:5.1f}"
-
-        #params['prio'] = prio
-        #params_choice['total_timesteps'] = 10
-        #params_choice['evaluation_episodes'] = 2
 
         param_dict = {**params_choice, **params_const}
         
@@ -200,14 +173,8 @@ for run in range(args.nb_runs):
         for k, v in params_choice.items():
             results[k] = [v]*n
 
-        #print(results)
         result_df = pd.DataFrame(results)
-        #print('result_df',result_df)
         results_df.append(result_df)
-
-        #print("modified_params: ", modified_params)
-
-
 
 with open(path/'params_const.yaml', 'w') as f:
     yaml.dump(params_const, f, default_flow_style=False)
@@ -216,7 +183,6 @@ with open(path/'params_list_choice.yaml', 'w') as f:
     yaml.dump(params_list_choice, f, default_flow_style=False)
 
 results_df = pd.concat(results_df)
-#print(results_df)
 results_df.to_csv(path/ 'eval_prio.csv', index=False)
 
 sns.lineplot(x="Step", y="Average optimality",
