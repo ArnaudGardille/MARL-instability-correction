@@ -1,6 +1,8 @@
 from myenvs.simultaneous_attack import *
 from myenvs.water_bomber import *
 from torch.distributions.categorical import Categorical
+import torchsnapshot
+import shutil
 
 from gym import Wrapper, ObservationWrapper
 from gym.spaces import MultiDiscrete, Box
@@ -93,6 +95,7 @@ def parse_args():
         help="whether to save images of the V or Q* functions")
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--buffer-on-disk", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     
 
     # Environment specific arguments
@@ -403,7 +406,6 @@ class QAgent():
 
         with torch.no_grad():
             td_error = torch.abs(td_target-old_val)
-
         self.writer.add_scalar(str(self.agent_id)+"/td_loss", loss, completed_episodes)
         self.writer.add_scalar(str(self.agent_id)+"/q_values", old_val.mean().item(), completed_episodes)
 
@@ -534,11 +536,11 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
     n_agents = len(q_agents)
     
     if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
-        
+        maybe_writer = writer if completed_episodes % params['evaluation_frequency'] == 0 else None
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
             if params['prioritize_big_buffer']:
@@ -546,14 +548,14 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
 
         elif params['rb'] =='likely':
             big_sample = replay_buffer.sample()
-            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
+            big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
         
         else:
             sample = replay_buffer.sample()
-            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=writer)
+            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
         if params['rb'] != 'correction':
             samples = [sample for _ in range(n_agents)]
@@ -815,6 +817,17 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=rb_path/run_name if params['save_buffer'] else None)
 
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/'replay_buffer' if params['buffer_on_disk'] else None)
+    if params['load_buffer_from'] is not None:
+        rb_path = str(Path(params['load_buffer_from']) / 'rb')
+        
+        print("loading buffer from", rb_path)
+        snapshot = torchsnapshot.Snapshot(path=rb_path)
+        target_state = {
+            "state": replay_buffer
+        }
+        snapshot.restore(app_state=target_state)
+        print("Replay buffer saved to", rb_path)
 
     ### Creating Agents
     q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
@@ -877,9 +890,16 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     # Savings
     if params['save_buffer']:
+        rb_path = str(path/ run_name / 'rb')
+        os.makedirs(rb_path, exist_ok=True)
+        """
         rb_path = path/ run_name / 'replay_buffer.pickle'
         with open(rb_path, 'wb') as handle:
-            pickle.dump(replay_buffer[:], handle)
+            pickle.dump(replay_buffer[:], handle)"""
+        
+
+        state = {"state": replay_buffer}
+        snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
         print("Replay buffer saved to", rb_path)
             
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]    
@@ -908,6 +928,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False, path=None):
     smaller_buffer = None
     if path is not None:
+        os.makedirs(path, exist_ok=True)
+        shutil.rmtree(path)
+        os.makedirs(path, exist_ok=True)
         print("Replay buffer location:", path/'replay_buffer')
         rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
     else:

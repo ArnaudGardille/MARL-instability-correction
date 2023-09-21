@@ -184,3 +184,13 @@ python src/iql_gym.py --save-model --env-id smac --total-timesteps 10000 --buffe
 python src/run_experiments.py --rb uniform laber --batch-size 32 128
 
 python src/iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000 --buffer-size 15000000 --save-buffer
+
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 15000000 --run-name big-rb --save-buffer --buffer-on-disk
+
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 1500000 --run-name medium-rb --save-buffer
+
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 1500000 --run-name medium-rb_epsilon --save-buffer --add-epsilon
+
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 1500000 --run-name medium-rb_explo --save-buffer --add-others-explo
+
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 1500000 --run-name medium-solo-10 --save-buffer --n-agents 10 --single-agent --map 10m_vs_11m

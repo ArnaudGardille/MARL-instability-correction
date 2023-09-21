@@ -59,3 +59,4 @@ t_max: 1
 verbose: False
 visualisation: False
 fixed_buffer: False
+buffer_on_disk: False
