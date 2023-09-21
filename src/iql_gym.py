@@ -790,7 +790,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
-        rb_path = str(Path(params['load_buffer_from']) / 'rb')
+        rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
         print("loading buffer from", rb_path)
         snapshot = torchsnapshot.Snapshot(path=rb_path)
@@ -873,13 +873,29 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
                     })
             pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
             results.append(average_return)
+
+
+            
+        if params['save_buffer'] and completed_episodes % params['buffer_size']==0:
+            k = completed_episodes // params['buffer_size']
+            rb_path = str(path/ run_name / 'rb' / str(k))
+            os.makedirs(rb_path, exist_ok=True)
+            """
+            rb_path = path/ run_name / 'replay_buffer.pickle'
+            with open(rb_path, 'wb') as handle:
+                pickle.dump(replay_buffer[:], handle)"""
+            
+
+            state = {"state": replay_buffer}
+            snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
+                    
                 
     env.close() 
     visu_env.close()
 
     # Savings
     if params['save_buffer']:
-        rb_path = str(path/ run_name / 'rb')
+        rb_path = str(path/ run_name / 'rb' / 'final')
         os.makedirs(rb_path, exist_ok=True)
         """
         rb_path = path/ run_name / 'replay_buffer.pickle'
@@ -1053,9 +1069,11 @@ def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, w
 
 def main(**params):
 
-    if params["run_name"] is None:
-        params["run_name"]= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
+    params["run_name"] = params["run_name"] if params["run_name"] is not None else ''
+    params["run_name"] += '_{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 
+    print("Run name:", params["run_name"])
+        
     steps, results = run_training(**params)
 
     wandb.finish()
