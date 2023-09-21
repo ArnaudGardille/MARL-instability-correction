@@ -58,12 +58,9 @@ warnings.filterwarnings("error", category=RuntimeWarning)
 scale = 0.25   
 
 def parse_args():
-    # fmt: off
     parser = argparse.ArgumentParser()
     parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac'] ,default='simultaneous',
         help="the id of the environment")
-    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
-        help="the name of this experiment")
     parser.add_argument("--seed", type=int,
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -72,25 +69,28 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to save model into the `runs/{run_name}` folder")
-    parser.add_argument("--plot-q-values", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--plot-q-values", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="whether to plot the q values. only available for the water-bomber env")
     parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True, default=False)
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
-    parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="saves the replay buffer inside the experiment folder")
     parser.add_argument("--run-name", type=str, default=None)
-    parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--buffer-on-disk", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="Nothing will be added to the buffer(only useful if it has been loaded)")
+    parser.add_argument("--buffer-on-disk", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="The buffer will be stored on disk. Useful if it is to big to fit in the RAM.")
     
 
     # Environment specific arguments
-    parser.add_argument("--x-max", type=int)
-    parser.add_argument("--y-max", type=int)
-    parser.add_argument("--t-max", type=int)
+    parser.add_argument("--x-max", type=int, help="Only for the water-bomber env")
+    parser.add_argument("--y-max", type=int, help="Only for the water-bomber env")
+    parser.add_argument("--t-max", type=int, help="Maximum episode duration")
     parser.add_argument("--n-agents", type=int)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--num-envs", type=int, 
-        help="the number of parallel game environments")
-
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z'
+        ,help="Select the map when using SMAC")
     # Algorithm specific arguments
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
@@ -98,24 +98,24 @@ def parse_args():
         help="the experiment from which to load agents.")
     parser.add_argument("--random-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="whether to show the video")
-    parser.add_argument("--total-timesteps", type=int, #
+        help="Agents won't be trained")
+    parser.add_argument("--total-timesteps", type=int, 
         help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate", type=float, #default=1e-3,
+    parser.add_argument("--learning-rate", type=float,
         help="the learning rate of the optimizer")
-    parser.add_argument("--buffer-size", type=int, #
+    parser.add_argument("--buffer-size", type=int, 
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, #default=0.99,
+    parser.add_argument("--gamma", type=float, 
         help="the discount factor gamma")
-    parser.add_argument("--tau", type=float, #default=1.,
+    parser.add_argument("--tau", type=float,
         help="the target network update rate")
-    parser.add_argument("--evaluation-frequency", type=int, #default=1000
-                        )
-    parser.add_argument("--evaluation-episodes", type=int, #default=100
-                        )
-    parser.add_argument("--target-network-frequency", type=int, # 
+    parser.add_argument("--evaluation-frequency", type=int, 
+        help="number of episodes between two evaluations")
+    parser.add_argument("--evaluation-episodes", type=int, 
+        help="number of evaluation episodes that will be averaged")
+    parser.add_argument("--target-network-frequency", type=int, 
         help="the timesteps it takes to update the target network")
-    parser.add_argument("--batch-size", type=int,  #2**18, #256, #
+    parser.add_argument("--batch-size", type=int,  
         help="the batch size of sample from the reply memory")
     parser.add_argument("--start-e", type=float, 
         help="the starting epsilon for exploration")
@@ -134,23 +134,28 @@ def parse_args():
         help="whether to add agents identity to observation")
     parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to add epsilon to observation")
-    parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True
+        ,help="Wheter to do prioritized experience replay on the big replay buffer (when using likely of laber)")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
-    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True)
-    parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None)
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z')
-    parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*")
-    parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True)
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform')
-    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
+    parser.add_argument("--prio", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True
+        ,help="Select the priorisation quantity for PER of Laber")
+    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="?", const=True
+        ,help="Select the priorisation quantity for Likely")
+    parser.add_argument("--loss-correction-for-others", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default=None
+        ,help="How to correct the loss for the others evolution. please refer to the article for more explanations")
+    parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*"
+        ,help="function that will be applied to the loss correction")
+    parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True
+        ,help="Allows to clip the correction")
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform',
+        help="whether to use a uniform, prioritized, Laber of Likely replay buffer.")
+    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True
+        ,help="whether to add a boolean vector of wheter each other agent is exploring to observation")
     args = parser.parse_args()
 
     return args
-
-
 
 
 def weighted_mse_loss(predicted, target, weight):
@@ -170,7 +175,6 @@ class QNetwork(nn.Module): #QNetworkSimpleMLP
 
     def forward(self, x):
         return self.network(x)
-
 
 class DuelingQNetwork(nn.Module):
     def __init__(self, obs_shape, act_shape):
@@ -242,7 +246,6 @@ def get_agents_distrib(batch, q_agents, epsilon):
 
     concat_distrib = torch.stack(concat_distrib, dim=1)
     return concat_distrib
-    
 class StateWrapper(ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
@@ -298,8 +301,6 @@ class QAgent():
   
         avail_actions = torch.tensor(avail_actions)
         avail_actions_ind = np.nonzero(avail_actions)
-
-
         proba_select_explo = epsilon/torch.sum(avail_actions, dim=1)
         probability = avail_actions*proba_select_explo.reshape((-1, 1))
         probability = torch.nan_to_num(probability, nan=0.0)
@@ -328,8 +329,6 @@ class QAgent():
 
         return float(action)
     
-    
-
     def train(self, sample, completed_episodes):
 
         sample = sample.to(self.device)
@@ -356,7 +355,6 @@ class QAgent():
 
         weights = torch.ones(self.batch_size).to(self.device)
         
-
         if self.loss_correction_for_others not in [None, 'none']:
             assert self.loss_correction_for_others in sample.keys()
 
@@ -391,10 +389,7 @@ class QAgent():
         loss.backward()
         self.optimizer.step()
 
-
         return td_error.cpu().detach().numpy()
-
-    
 
     def save(self, path):
         model_path = path / f"{self.agent_id}.iql_model"
@@ -409,8 +404,6 @@ class QAgent():
     def __str__(self):
         pprint(self.__dict__)
         return ""
-    
-
 
     def load_rb(self):
         env_type = "_det" if self.deterministic_env else "_rd"
@@ -451,7 +444,6 @@ class QAgent():
         num, denom = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
         return (num/denom).to(self.device)
     
-    
 def visualize_trajectory(env, agents, completed_episodes):
     arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
@@ -491,7 +483,6 @@ def visualize_trajectory(env, agents, completed_episodes):
         state = env.get_state()[:-1]
         terminated = n_terminated[0] or (state in states)
         states.append(state)
-
 
     fig, ax = plt.subplots()
     im = ax.imshow(q_values.T[::-1])
@@ -554,13 +545,11 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
 
     return q_agents
 
-
 def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False, writer=None):
     if training:
         assert replay_buffer is not None
         if params['rb'] == 'laber':
             assert smaller_buffer is not None
-
     
     if plot_q_values:
         assert params['env_id'] == 'water_bomber'
@@ -601,11 +590,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             n_other_act_randomly = torch.tensor(n_other_act_randomly).reshape(-1)
         n_obs = torch.cat((n_obs, n_other_act_randomly.float()), dim=-1).float()
     
-
     while not terminated:
         if visualisation:
             env.render()  # Uncomment for rendering
-
 
         n_action = []
         n_probabilities = []

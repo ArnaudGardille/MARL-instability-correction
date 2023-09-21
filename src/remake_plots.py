@@ -12,33 +12,21 @@ from distutils.util import strtobool
 import argparse 
 import yaml
 
-
-#import warnings
-#warnings.filterwarnings("ignore")
-
 def parse_args():
-    # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--name", type=str, default=None)
-    parser.add_argument("--x", type=float, default=11.7)
-    parser.add_argument("--y", type=float, default=8.27)
+    parser.add_argument("--experience-name", type=str, default=None)
     args = parser.parse_args()
-    # fmt: on
-    #assert args.num_envs == 1, "vectorized envs are not supported at the moment"
 
     return args
 args = parse_args()
 
-#name = args.name.replace('/', ':')
-name = args.name
-path = Path.cwd() / 'results' / name
+path = Path.cwd() / 'results' / args.experience_name #.replace('/', ':')
 
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
 
 
 sns.set_theme(style="darkgrid")
-#sns.set(rc={'figure.figsize':(args.x, args.y)})
 
 with open(path/'params_const.yaml', 'r') as f:
     params_const = yaml.safe_load(f)
@@ -68,11 +56,6 @@ for k, v in params_list_choice.items():
         modified_params[i] = k
         i += 1
 
-#print("modified_params:", modified_params)
-
-
-
-
 results_df = pd.read_csv(path / "eval_prio.csv")
 
 for key, values in params_const.items():
@@ -81,8 +64,6 @@ for key, values in params_const.items():
 
 for key, values in params_list_choice.items():
     results_df = results_df[results_df[key].isin(values)]
-
-#print(results_df)
 
 sns.lineplot(x="Step", y="Average optimality",
              hue=modified_params[0], style=modified_params[1],

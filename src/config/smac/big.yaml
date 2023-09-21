@@ -60,3 +60,5 @@ visualisation: False
 use_state: True
 fixed_buffer: False
 buffer_on_disk: True
+plot_q_values: False
+

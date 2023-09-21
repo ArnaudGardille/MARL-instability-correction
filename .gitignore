@@ -136,6 +136,8 @@ ENV/
 env.bak/
 venv.bak/
 wandb/
+my-envs/
+smaclite/
 logs/
 *.zip
 

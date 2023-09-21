@@ -20,36 +20,41 @@ def parse_args():
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
+    parser.add_argument("--nb-runs", type=int, default=3,
+        help="the number of trainings that will be averaged")
+
     # Environment specific arguments
     parser.add_argument("--x-max", type=int)
     parser.add_argument("--y-max", type=int)
     parser.add_argument("--t-max", type=int)
     parser.add_argument("--n-agents", type=int, nargs="*")
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--num-envs", type=int,
-        help="the number of parallel game environments")
-    parser.add_argument("--nb-runs", type=int, default=3)
-
-    # Algorithm specific arguments
     parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac'] ,default='simultaneous',
         help="the id of the environment")
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="*"
+        ,help="Select the map when using SMAC")
+
+    # Algorithm specific arguments
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
     parser.add_argument("--load-buffer-from", type=str, default=None,
         help="the experiment from which to load agents.")
     parser.add_argument("--random-policy", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
     parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)) , const=True, nargs="?",
-        help="whether to show the video")
+        help="The agents won't be trained")
     parser.add_argument("--total-timesteps", type=int, nargs="*",
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, nargs="*",
         help="the learning rate of the optimizer")
     parser.add_argument("--buffer-size", type=int, nargs="*",
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, nargs="*",)
+    parser.add_argument("--gamma", type=float, nargs="*",
+        help="the discount factor")
     parser.add_argument("--tau", type=float, help="the target network update rate")
-    parser.add_argument("--evaluation-frequency", type=int, nargs="*",)
-    parser.add_argument("--evaluation-episodes", type=int, nargs="*",)
+    parser.add_argument("--evaluation-frequency", type=int, nargs="*",
+        help="number of episodes between two evaluations")
+    parser.add_argument("--evaluation-episodes", type=int, nargs="*",
+        help="number of evaluation episodes that will be averaged")
     parser.add_argument("--target-network-frequency", type=int,
         help="the timesteps it takes to update the target network")
     parser.add_argument("--batch-size", type=int,  nargs="*",
@@ -67,25 +72,29 @@ def parse_args():
     parser.add_argument("--single-agent", type=lambda x: bool(strtobool(x)), nargs="*", 
         help="whether to use a single network for all agents. Identity is the added to observation")
     parser.add_argument("--add-id", type=lambda x: bool(strtobool(x)) , const=True, nargs="?", 
-        help="whether to add agents identity to observation")
+        help="whether to add a one-hot envodding of agents identity to observation")
     parser.add_argument("--add-epsilon", type=lambda x: bool(strtobool(x)) , nargs="*", help="whether to add epsilon to observation")
-    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="*")
+    parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="*"
+        ,help="whether to add a boolean vector of wheter each other agent is exploring to observation")
     parser.add_argument("--dueling", type=lambda x: bool(strtobool(x)), nargs="*", 
         help="whether to use a dueling network architecture.")
     parser.add_argument("--deterministic-env", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
-    parser.add_argument("--n-actions", type=int, nargs='*')
     parser.add_argument("--verbose", type=lambda x: bool(strtobool(x)) , const=True, nargs="?")
-    parser.add_argument("--loss-correction-for-others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
-    parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*")
-    parser.add_argument("--clip-correction-after", type=float, nargs="*")
-    parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--loss-not-corrected-for-priorisation", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
-    parser.add_argument("--loss_correction_for_others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*")
+    parser.add_argument("--loss-correction-for-others", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], nargs="*"
+        ,help="How to correct the loss for the others evolution. please refer to the article for more explanations")
+    parser.add_argument("--correction-modification", choices=['none', 'sqrt', 'sigmoid', 'normalize'] , nargs="*"
+        ,help="function that will be applied to the loss correction")
+    parser.add_argument("--clip-correction-after", type=float, nargs="*"
+        ,help="Allows to clip the correction")
+    parser.add_argument("--prioritize-big-buffer", type=lambda x: bool(strtobool(x)), nargs="*"
+        ,help="Wheter to do prioritized experience replay on the big replay buffer (when using likely of laber)")
+    parser.add_argument("--prio", choices=['none','td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*"
+        ,help="Select the priorisation quantity for PER of Laber")
     parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], nargs="*",
-        help="whether to use a prioritized replay buffer.")
-    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*")
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="*")
+        help="whether to use a uniform, prioritized, Laber of Likely replay buffer.")
+    parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*"
+        ,help="Select the priorisation quantity for Likely")
+    
     args = parser.parse_args()
 
     return args
