@@ -18,7 +18,7 @@ n_agents: 10
 n_actions: 18
 
     # Algorithm specific arguments
-env_id: simultaneous
+env_id: smac
 random_policy: False
 no_training: False
 total_timesteps: 10000

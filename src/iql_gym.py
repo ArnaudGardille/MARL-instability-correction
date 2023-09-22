@@ -11,7 +11,6 @@ from myenvs.water_bomber import *
 from torch.distributions.categorical import Categorical
 import torchsnapshot
 import shutil
-import lbforaging
 
 from gym import Wrapper, ObservationWrapper
 from gym.spaces import MultiDiscrete, Box
@@ -41,7 +40,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import smaclite  
 import pygame
 from collections import Counter
 from torch.nn.functional import sigmoid
@@ -222,12 +220,16 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 def create_env(env_id, params):
     if env_id == 'simultaneous':
+        from myenvs.simultaneous_attack import SimultaneousEnv
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'], common_reward=params['enforce_coop'])
     elif env_id == 'water-bomber':
+        from myenvs.water_bomber import WaterBomberEnv
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
+        import smaclite  
         env = gym.make(f"smaclite/"+params['map'])
     elif env_id == 'lbf':
+        import lbforaging
         n_agents = str(params['n_agents'])
         coop = 'coop-' if params['enforce_coop'] else ''
         env_name = "Foraging-5x5-"+n_agents+"p-"+n_agents+"f-"+coop+"v2"
@@ -350,6 +352,7 @@ class QAgent():
         reward = sample['rewards']
         dones = sample['dones']
         actions = sample['actions']
+        weights = sample['weights']
 
         if self.params['add_id']: 
             batch_id = self.one_hot_id.repeat(self.params['batch_size'], 1)
@@ -364,7 +367,7 @@ class QAgent():
             td_target = reward.flatten() + self.gamma * target_max * (1 - dones.flatten())
         old_val = (self.q_network(obs)*action_mask).gather(1, actions).squeeze()
 
-        weights = torch.ones(self.batch_size).to(self.device)
+        #weights = torch.ones(self.batch_size).to(self.device)
         
         if self.loss_correction_for_others not in [None, 'none']:
             assert self.loss_correction_for_others in sample.keys()
@@ -534,10 +537,19 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             sample = replay_buffer.sample()
             sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
-        if params['rb'] != 'correction':
-            samples = [sample for _ in range(n_agents)]
+        #samples = [sample for _ in range(n_agents)]
+        weights = torch.ones((len(sample),))
+
+        if '_weight' in sample.keys():
+            weights = sample['_weight']
+        
+        weights = weights.sum()/weights
+        weights /= weights.max()
+
+        sample['weights'] = weights.repeat((n_agents, 1)).T
+
         td_errors = []
-        for agent_id, (agent, sample) in enumerate(zip(q_agents, samples)):
+        for agent_id, agent in enumerate(q_agents):
             
             agent_td_error = agent.train(sample[:,agent_id], completed_episodes)
             td_errors.append(agent_td_error)
@@ -792,7 +804,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
-        rb_path = str(Path(params['load_buffer_from']) / 'rb')
+        rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
         print("loading buffer from", rb_path)
         snapshot = torchsnapshot.Snapshot(path=rb_path)
@@ -872,13 +884,29 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
                     })
             pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
             results.append(average_return)
+
+
+            
+        if params['save_buffer'] and completed_episodes % params['buffer_size']==0:
+            k = completed_episodes // params['buffer_size']
+            rb_path = str(path/ run_name / 'rb' / str(k))
+            os.makedirs(rb_path, exist_ok=True)
+            """
+            rb_path = path/ run_name / 'replay_buffer.pickle'
+            with open(rb_path, 'wb') as handle:
+                pickle.dump(replay_buffer[:], handle)"""
+            
+
+            state = {"state": replay_buffer}
+            snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
+                    
                 
     env.close() 
     visu_env.close()
 
     # Savings
     if params['save_buffer']:
-        rb_path = str(path/ run_name / 'rb')
+        rb_path = str(path/ run_name / 'rb' / 'final')
         os.makedirs(rb_path, exist_ok=True)
         """
         rb_path = path/ run_name / 'replay_buffer.pickle'
@@ -1052,9 +1080,11 @@ def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, w
 
 def main(**params):
 
-    if params["run_name"] is None:
-        params["run_name"]= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
+    params["run_name"] = params["run_name"] if params["run_name"] is not None else ''
+    params["run_name"] += '_{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 
+    print("Run name:", params["run_name"])
+        
     steps, results = run_training(**params)
 
     wandb.finish()
