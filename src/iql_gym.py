@@ -1,9 +1,4 @@
-# Warnings supression
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("error", category=RuntimeWarning)
+
 
 
 from myenvs.simultaneous_attack import *
@@ -55,7 +50,12 @@ from tensordict import tensorclass, TensorDict
 from torchrl.data.replay_buffers.samplers import RandomSampler, PrioritizedSampler
 from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage, LazyMemmapStorage, ListStorage, TensorDictPrioritizedReplayBuffer
 
-
+# Warnings supression
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("error", category=RuntimeWarning)
 scale = 0.25   
 
 def parse_args():
@@ -688,7 +688,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             print("n_action_mask", n_action_mask)
             print()
 
-        episode_reward += n_reward
+        episode_reward += np.array(n_reward).squeeze()
 
         #if training: On ajoute au rb meme quand on explore pas
 
