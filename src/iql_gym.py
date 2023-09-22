@@ -620,6 +620,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     
     while not terminated:
         if visualisation:
+            sleep(0.1)
             env.render()  # Uncomment for rendering
 
         n_action = []
