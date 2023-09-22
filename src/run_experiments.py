@@ -10,6 +10,13 @@ from distutils.util import strtobool
 import argparse 
 import yaml
 
+# Warnings supression
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("error", category=RuntimeWarning)
+
 sns.set_theme(style="darkgrid")
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
@@ -95,6 +102,7 @@ def parse_args():
         help="whether to use a uniform, prioritized, Laber of Likely replay buffer.")
     parser.add_argument("--filter", choices=['none', 'td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur', 'past'], nargs="*"
         ,help="Select the priorisation quantity for Likely")
+    parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), default=True, nargs="*")
     
     args = parser.parse_args()
 
