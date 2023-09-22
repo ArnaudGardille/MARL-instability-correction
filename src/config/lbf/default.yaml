@@ -23,8 +23,8 @@ env_id: simultaneous
 random_policy: False
 no_training: False
 total_timesteps: 100000
-learning_rate: 0.01
-buffer_size: 5000000
+learning_rate: 0.001
+buffer_size: 500000
 gamma: 0.99
 tau: 1.
 evaluation_frequency: 100
@@ -40,7 +40,7 @@ single_agent: False
 add_id: False
 add_epsilon: False
 add_others_explo: False
-dueling: False
+dueling: True
 deterministic_env: False
 boltzmann_policy: False
 loss_corrected_for_others: False

@@ -800,9 +800,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     else:
         rb_path = path
     
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=rb_path/run_name if params['save_buffer'] else None)
-
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/'replay_buffer' if params['buffer_on_disk'] else None)
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
         rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
