@@ -65,6 +65,10 @@ def parse_args():
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
+    #parser.add_argument("--correct-prio-small-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    #parser.add_argument("--correct-prio-big-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="")
     parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -221,7 +225,7 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 def create_env(env_id, params):
     if env_id == 'simultaneous':
         from myenvs.simultaneous_attack import SimultaneousEnv
-        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'], common_reward=params['enforce_coop'])
+        env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])#, common_reward=params['enforce_coop'])
     elif env_id == 'water-bomber':
         from myenvs.water_bomber import WaterBomberEnv
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
@@ -538,15 +542,16 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
         #samples = [sample for _ in range(n_agents)]
-        weights = torch.ones((len(sample),))
+        weights = torch.ones((len(sample),n_agents))
 
-        if '_weight' in sample.keys():
+        if '_weight' in sample.keys() and params['correct_prio']:
             weights = sample['_weight']
         
-        weights = weights.sum()/weights
-        weights /= weights.max()
+        weights = weights/weights.sum()
+        #weights.sum()/weights
+        #weights /= weights.max()
 
-        sample['weights'] = weights.repeat((n_agents, 1)).T
+        sample['weights'] = weights #.repeat((n_agents, 1)).T
 
         td_errors = []
         for agent_id, agent in enumerate(q_agents):
