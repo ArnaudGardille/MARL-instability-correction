@@ -1,3 +1,11 @@
+# Warnings supression
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("error", category=RuntimeWarning)
+
+
 from myenvs.simultaneous_attack import *
 from myenvs.water_bomber import *
 from torch.distributions.categorical import Categorical
@@ -49,12 +57,6 @@ from tensordict import tensorclass, TensorDict
 from torchrl.data.replay_buffers.samplers import RandomSampler, PrioritizedSampler
 from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage, LazyMemmapStorage, ListStorage, TensorDictPrioritizedReplayBuffer
 
-# Warnings supression
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("error", category=RuntimeWarning)
 
 scale = 0.25   
 
@@ -730,7 +732,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     env = create_env(env_id, params)
     visu_env = create_env(env_id, params)
 
-
+    print("writer path: ", path/run_name)
     writer = SummaryWriter(path/run_name) #
     writer.add_text(
         "hyperparameters",
@@ -858,9 +860,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
                 average_return = np.sum(agents_total_rewards)
             else:
                 average_return = np.mean(agents_total_rewards)
-
-            writer.add_scalar("Average Return", average_return, completed_episodes)
-            average_return = np.mean(agents_total_rewards)
 
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             writer.add_scalar("Average Return", average_return, completed_episodes)
