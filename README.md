@@ -220,4 +220,6 @@ python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buf
 python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-coop-buffer
 python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-coop-augm-buffer --add-epsilon --add-others-explo
 python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-single-buffer --single-agent --add-id
-python src/iql_gym.py --env-id lbf --save-buffer --save-model --run-name lbf-buffer
+python src/iql_gym.py --env-id lbf --save-buffer --save-model --run-name lbf-buffer.
+
+python src/iql_gym.py --env-id smac --save-buffer --save-model --run-name smac-small-buffer

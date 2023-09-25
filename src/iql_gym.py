@@ -263,6 +263,146 @@ def get_agents_distrib(batch, q_agents, epsilon):
 
     concat_distrib = torch.stack(concat_distrib, dim=1)
     return concat_distrib
+
+
+
+def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False, path=None):
+    smaller_buffer = None
+    if path is not None:
+        os.makedirs(path, exist_ok=True)
+        shutil.rmtree(path)
+        os.makedirs(path, exist_ok=True)
+        print("Replay buffer location:", path/'replay_buffer')
+        rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
+    else:
+        rb_storage = LazyTensorStorage(buffer_size, device='cpu')
+    if rb_type == 'uniform' or rb_type == 'correction':
+        replay_buffer = TensorDictReplayBuffer(
+            storage=rb_storage,
+            batch_size=batch_size,
+        )
+
+    elif rb_type == 'prioritized':
+        replay_buffer = TensorDictPrioritizedReplayBuffer(
+            alpha = 1.0,
+            beta = 1.0,
+            priority_key="td_error",
+            storage=rb_storage,
+            batch_size=batch_size,
+        )
+        
+    else:
+        if prioritize_big_buffer:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                storage=rb_storage,
+                alpha = 1.0,
+                beta = 1.0,
+                priority_key="td_error",
+                batch_size=4*batch_size,
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                storage=rb_storage,
+                #priority_key="td_error",
+                batch_size=4*batch_size,
+            )
+        
+
+        if rb_type =='laber':
+            smaller_buffer_size = 4*batch_size
+
+            smaller_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha = 1.0,
+                beta = 1.0,
+                priority_key=prio,
+                storage=LazyTensorStorage(smaller_buffer_size),
+                batch_size=batch_size,
+            )
+
+    return replay_buffer, smaller_buffer
+
+
+def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_agent):
+        current_likelyhood, past_likelyhood = [], []
+        for agent_id, agent in enumerate(agents):
+            
+            sample = sample.to(agent.device)
+            obs = sample['observations'][:, agent_id].float()
+            action_mask = sample['action_mask'][:, agent_id]
+            next_obs = sample['next_observations'][:, agent_id].float()
+            next_action_mask = sample['next_action_mask'][:, agent_id]
+            reward = sample['rewards'][:, agent_id]
+            dones = sample['dones'][:, agent_id]
+            actions = sample['actions'][:, agent_id]
+            old_probability = sample['actions_likelihood'][:,agent_id]
+
+            if agent.params['add_id']: 
+                batch_id = agent.one_hot_id.repeat(sample.shape[0], 1).to(agent.device)
+                obs = torch.cat((obs, batch_id), dim=-1).float()
+                next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
+
+            with torch.no_grad():
+                    
+                q_values = agent.q_network(obs)
+
+                considered_q_values = q_values + (action_mask-1.0)*9999.0
+                best_actions = torch.argmax(considered_q_values, dim=1)#.reshape(1)
+
+                actions = actions.squeeze()
+
+                assert torch.all(torch.sum(action_mask, 1) >0)
+                mask = (actions == best_actions).float()
+                proba_rd = epsilon/torch.sum(action_mask, 1)
+                probability = mask*(1.0-epsilon+proba_rd) + (1.0-mask)*proba_rd
+                
+                current_likelyhood.append(probability.cpu().numpy())
+                past_likelyhood.append(old_probability.squeeze().cpu().numpy()) 
+
+        others_current_likelyhood = torch.tensor(np.prod([current_likelyhood[:n]+current_likelyhood[n+1:] for n in range(len(agents))], axis=1)).cpu()
+        others_past_likelyhood = torch.tensor(np.prod([past_likelyhood[:n]+past_likelyhood[n+1:] for n in range(len(agents))], axis=1)).cpu()
+        return others_current_likelyhood.T, others_past_likelyhood.T
+
+
+def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, writer=None, use_state=False):
+    
+    n_agents = len(agents)
+    if use_state:
+        sample = sample[:,0]
+        repeated_state = sample['observations'].unsqueeze(1).repeat(1, n_agents, 1)
+        sample['observations'] = repeated_state
+        repeated_next_state = sample['next_observations'].unsqueeze(1).repeat(1, n_agents, 1)
+        sample['next_observations'] = repeated_next_state
+        sample['index'] = sample['index'].unsqueeze(1).repeat(1, n_agents)
+        if '_weight' in sample.keys():
+            sample['_weight'] = sample['_weight'].unsqueeze(1).repeat(1, n_agents)
+
+    sample = TensorDict(sample, batch_size=[sample.shape[0], n_agents])
+
+    td_error = torch.stack([agent.get_td_error(sample[:,id_agent]).to('cpu') for id_agent, agent in enumerate(agents)], dim=1)
+    current_likelyhood, past_likelyhood = current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_agent)
+
+    sample.set("td_error",td_error)
+    sample.set("td-past",td_error/past_likelyhood)
+    sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
+    sample.set("td-cur",td_error*current_likelyhood)
+    sample.set("cur-past",current_likelyhood/past_likelyhood)
+    sample.set("cur",current_likelyhood)
+    sample.set("past",past_likelyhood)
+
+
+    if (completed_episodes is not None) and (writer is not None):
+        for key in ['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur']:
+
+            writer.add_scalar('Mean ratios/'+ key, sample[key].mean(), global_step=completed_episodes)
+            writer.add_scalar('Std ratios/'+ key, sample[key].std(), global_step=completed_episodes)
+
+        writer.add_scalar('Mean ratios/past', past_likelyhood.mean(), global_step=completed_episodes)
+        writer.add_scalar('Std ratios/past', past_likelyhood.std(), global_step=completed_episodes)
+
+    return sample
+
+
+
 class StateWrapper(ObservationWrapper):
     def __init__(self, env):
         super().__init__(env)
@@ -359,7 +499,7 @@ class QAgent():
         weights = sample['weights']
 
         if self.params['add_id']: 
-            batch_id = self.one_hot_id.repeat(self.params['batch_size'], 1)
+            batch_id = self.one_hot_id.repeat(self.params['batch_size'], 1).to(self.device)
             obs = torch.cat((obs, batch_id), dim=-1).float()
             next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
 
@@ -423,17 +563,6 @@ class QAgent():
         pprint(self.__dict__)
         return ""
 
-    def load_rb(self):
-        env_type = "_det" if self.deterministic_env else "_rd"
-        add_eps = "_eps" if self.add_epsilon else ""
-        add_expl = "_expl" if self.add_others_explo else ""
-
-        path = Path.cwd() / 'rbs' / Path(str(self.agent_id)+env_type+add_eps+add_expl+'_replay_buffer.pickle')
-        with open(path, 'rb') as handle:
-            data = pickle.load(handle)
-
-        self.replay_buffer.extend(data)
-
     def get_td_error(self, sample):
 
         sample = sample.to(self.device)
@@ -446,7 +575,7 @@ class QAgent():
         actions = sample['actions']
 
         if self.params['add_id']: 
-            batch_id = self.one_hot_id.repeat(sample.shape[0], 1) #4*self.params['batch_size']
+            batch_id = self.one_hot_id.repeat(sample.shape[0], 1).to(self.device) #4*self.params['batch_size']
             obs = torch.cat((obs, batch_id), dim=-1).float()
             next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
         
@@ -463,6 +592,9 @@ class QAgent():
         return (num/denom).to(self.device)
     
 def visualize_trajectory(env, agents, completed_episodes):
+    """
+    Permet de visualiser une trajectoire pour water bomber
+    """
     arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
     n_obs, info = env.reset(return_info=True, deterministic=True)
@@ -548,8 +680,6 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             weights = sample['_weight']
         
         weights = weights/weights.sum()
-        #weights.sum()/weights
-        #weights /= weights.max()
 
         sample['weights'] = weights #.repeat((n_agents, 1)).T
 
@@ -944,141 +1074,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     assert params == old_params, (params, old_params)
     return steps, results
-
-def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False, path=None):
-    smaller_buffer = None
-    if path is not None:
-        os.makedirs(path, exist_ok=True)
-        shutil.rmtree(path)
-        os.makedirs(path, exist_ok=True)
-        print("Replay buffer location:", path/'replay_buffer')
-        rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
-    else:
-        rb_storage = LazyTensorStorage(buffer_size, device='cpu')
-    if rb_type == 'uniform' or rb_type == 'correction':
-        replay_buffer = TensorDictReplayBuffer(
-            storage=rb_storage,
-            batch_size=batch_size,
-        )
-
-    elif rb_type == 'prioritized':
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            alpha = 1.0,
-            beta = 1.0,
-            priority_key="td_error",
-            storage=rb_storage,
-            batch_size=batch_size,
-        )
-        
-    else:
-        if prioritize_big_buffer:
-            replay_buffer = TensorDictPrioritizedReplayBuffer(
-                storage=rb_storage,
-                alpha = 1.0,
-                beta = 1.0,
-                priority_key="td_error",
-                batch_size=4*batch_size,
-            )
-        else:
-            replay_buffer = TensorDictReplayBuffer(
-                storage=rb_storage,
-                #priority_key="td_error",
-                batch_size=4*batch_size,
-            )
-        
-
-        if rb_type =='laber':
-            smaller_buffer_size = 4*batch_size
-
-            smaller_buffer = TensorDictPrioritizedReplayBuffer(
-                alpha = 1.0,
-                beta = 1.0,
-                priority_key=prio,
-                storage=LazyTensorStorage(smaller_buffer_size),
-                batch_size=batch_size,
-            )
-
-    return replay_buffer, smaller_buffer
-
-
-def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_agent):
-        current_likelyhood, past_likelyhood = [], []
-        for agent_id, agent in enumerate(agents):
-            
-            sample = sample.to(agent.device)
-            obs = sample['observations'][:, agent_id].float()
-            action_mask = sample['action_mask'][:, agent_id]
-            next_obs = sample['next_observations'][:, agent_id].float()
-            next_action_mask = sample['next_action_mask'][:, agent_id]
-            reward = sample['rewards'][:, agent_id]
-            dones = sample['dones'][:, agent_id]
-            actions = sample['actions'][:, agent_id]
-            old_probability = sample['actions_likelihood'][:,agent_id]
-
-            if agent.params['add_id']: 
-                batch_id = agent.one_hot_id.repeat(sample.shape[0], 1)
-                obs = torch.cat((obs, batch_id), dim=-1).float()
-                next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
-
-            with torch.no_grad():
-                    
-                q_values = agent.q_network(obs)
-
-                considered_q_values = q_values + (action_mask-1.0)*9999.0
-                best_actions = torch.argmax(considered_q_values, dim=1)#.reshape(1)
-
-                actions = actions.squeeze()
-
-                assert torch.all(torch.sum(action_mask, 1) >0)
-                mask = (actions == best_actions).float()
-                proba_rd = epsilon/torch.sum(action_mask, 1)
-                probability = mask*(1.0-epsilon+proba_rd) + (1.0-mask)*proba_rd
-                
-                current_likelyhood.append(probability.cpu().numpy())
-                past_likelyhood.append(old_probability.squeeze().cpu().numpy()) 
-
-        others_current_likelyhood = torch.tensor(np.prod([current_likelyhood[:n]+current_likelyhood[n+1:] for n in range(len(agents))], axis=1)).cpu()
-        others_past_likelyhood = torch.tensor(np.prod([past_likelyhood[:n]+past_likelyhood[n+1:] for n in range(len(agents))], axis=1)).cpu()
-        return others_current_likelyhood.T, others_past_likelyhood.T
-
-
-def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, writer=None, use_state=False):
-    
-    n_agents = len(agents)
-    if use_state:
-        sample = sample[:,0]
-        repeated_state = sample['observations'].unsqueeze(1).repeat(1, n_agents, 1)
-        sample['observations'] = repeated_state
-        repeated_next_state = sample['next_observations'].unsqueeze(1).repeat(1, n_agents, 1)
-        sample['next_observations'] = repeated_next_state
-        sample['index'] = sample['index'].unsqueeze(1).repeat(1, n_agents)
-        if '_weight' in sample.keys():
-            sample['_weight'] = sample['_weight'].unsqueeze(1).repeat(1, n_agents)
-
-    sample = TensorDict(sample, batch_size=[sample.shape[0], n_agents])
-
-    td_error = torch.stack([agent.get_td_error(sample[:,id_agent]).to('cpu') for id_agent, agent in enumerate(agents)], dim=1)
-    current_likelyhood, past_likelyhood = current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_agent)
-
-    sample.set("td_error",td_error)
-    sample.set("td-past",td_error/past_likelyhood)
-    sample.set("td-cur-past",td_error*current_likelyhood/past_likelyhood)
-    sample.set("td-cur",td_error*current_likelyhood)
-    sample.set("cur-past",current_likelyhood/past_likelyhood)
-    sample.set("cur",current_likelyhood)
-    sample.set("past",past_likelyhood)
-
-
-    if (completed_episodes is not None) and (writer is not None):
-        for key in ['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur']:
-
-            writer.add_scalar('Mean ratios/'+ key, sample[key].mean(), global_step=completed_episodes)
-            writer.add_scalar('Std ratios/'+ key, sample[key].std(), global_step=completed_episodes)
-
-        writer.add_scalar('Mean ratios/past', past_likelyhood.mean(), global_step=completed_episodes)
-        writer.add_scalar('Std ratios/past', past_likelyhood.std(), global_step=completed_episodes)
-
-    return sample
 
 
 
