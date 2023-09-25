@@ -4,8 +4,9 @@ seed: 0
 torch_deterministic: True
 device: 'cpu'
 track: False
+display_video: False
+capture_video: False
 save_model: True
-upload_model: False
 use_state: False
 save_buffer: False
 save_imgs: False
@@ -14,33 +15,31 @@ load_buffer_from:
     
 
     # Environment specific arguments
-x_max: 4
-y_max: 2
-t_max: 20
 n_agents: 2
+n_actions: 2
 env_normalization: True
-num_envs: 1
+
 
     # Algorithm specific arguments
-env_id: "water-bomber"
+env_id: simultaneous
 random_policy: False
 no_training: False
 total_timesteps: 100000
 learning_rate: 0.01
-buffer_size: 2000000
-gamma: 0.9
+buffer_size: 500000
+gamma: 0.99
 tau: 1.
-evaluation_frequency: 1000
-evaluation_episodes: 100
-target_network_frequency: 100
+evaluation_frequency: 100
+evaluation_episodes: 10
+target_network_frequency: 50
 batch_size:  1000 #2**18, #256, #
 start_e: 0.99
 end_e: 0.05
 exploration_fraction: 0.8
-learning_starts: 1000
-train_frequency: 5
+learning_starts: 100
+train_frequency: 1
 single_agent: False
-add_id: True
+add_id: False
 add_epsilon: False
 add_others_explo: False
 dueling: True
@@ -48,19 +47,22 @@ deterministic_env: False
 boltzmann_policy: False
 loss_corrected_for_others: False
 loss_not_corrected_for_priorisation: False
-prio: 'td_error' #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='')
-rb: 'uniform' # choices=['uniform', 'prioritized', 'laber'], default='uniform',
+prio: td_error #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-past', 'cur'], default='')
+rb: uniform # choices=['uniform', 'prioritized', 'laber'], default='uniform',
 
 loss_correction_for_others: 'none'
 correction_modification: 'none'
-clip_correction_after: 
 
+clip_correction_after: 
 filter: cur-past
+
 prioritize_big_buffer: False
+t_max: 50
 verbose: False
 visualisation: False
 fixed_buffer: False
 buffer_on_disk: False
 plot_q_values: False
-enforce_coop: True
+enforce_coop: False
+
 correct_prio: True

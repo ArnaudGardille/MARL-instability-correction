@@ -1,0 +1,16 @@
+gym==0.25.0
+gymnasium
+matplotlib
+numpy
+pandas
+pygame
+PyYAML
+seaborn
+tensordict
+torchrl
+tqdm
+wandb
+torchsnapshot
+tensorboard
+
+

@@ -2,14 +2,13 @@
 
 seed: 0
 torch_deterministic: True
-cuda: False
+device: 'cpu'
 track: False
 display_video: False
 capture_video: False
 save_model: True
 use_state: False
 save_buffer: False
-load_buffer: False
 save_imgs: False
 load_agents_from: 
 load_buffer_from: 
@@ -50,6 +49,18 @@ prio: td_error #choices=['td_error', 'td-past', 'td-cur-past', 'td-cur', 'cur-pa
 rb: uniform # choices=['uniform', 'prioritized', 'laber'], default='uniform',
 
 loss_correction_for_others: 'none'
-sqrt_correction: False
+correction_modification: 'none'
+
 clip_correction_after: 
-filter: td-past
+filter: cur-past
+
+prioritize_big_buffer: False
+t_max: 1
+verbose: False
+visualisation: False
+fixed_buffer: False
+buffer_on_disk: False
+plot_q_values: False
+enforce_coop: True
+
+correct_prio: True
