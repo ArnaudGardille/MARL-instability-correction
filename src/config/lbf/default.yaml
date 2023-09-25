@@ -21,7 +21,7 @@ env_normalization: True
 
 
     # Algorithm specific arguments
-env_id: simultaneous
+env_id: lbf
 random_policy: False
 no_training: False
 total_timesteps: 100000
