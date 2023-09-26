@@ -58,6 +58,7 @@ coverage.xml
 cover/
 
 old_experiments/
+old_exp/
 
 # Translations
 *.mo

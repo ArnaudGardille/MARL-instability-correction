@@ -221,3 +221,5 @@ python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --
 python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-coop-augm-buffer --add-epsilon --add-others-explo
 python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-single-buffer --single-agent --add-id
 python src/iql_gym.py --env-id lbf --save-buffer --save-model --run-name lbf-buffer
+
+python src/iql_gym.py --env-id lbf  --save-buffer --save-model --buffer-size 50000
