@@ -223,3 +223,8 @@ python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --
 python src/iql_gym.py --env-id lbf --save-buffer --save-model --run-name lbf-buffer.
 
 python src/iql_gym.py --env-id smac --save-buffer --save-model --run-name smac-small-buffer
+
+python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id lbf --save-buffer --save-model --use-state
+
+python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state --buffer-size 1000000
+
