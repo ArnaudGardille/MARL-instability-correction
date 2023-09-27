@@ -54,7 +54,6 @@ And visualise the tranining by passing the experiment's directory to tensorboard
 ```
 tensorboard --logdir=.../test
 ```
-
 You can also average over several training, run experiments with different parameters and plot the results
 ```
 python src/run_experiments.py  -env-id simultaneous --n-agents 2 4 6 8 10 --nb-runs 10
@@ -63,6 +62,11 @@ python src/run_experiments.py  -env-id simultaneous --n-agents 2 4 6 8 10 --nb-r
 If you want to modify things in the explerience forlder and re-make the plots, use:
 ```
 python src/remake_plots.py --experience-name test                 
+```
+
+In order to visalize a trained agent, just run 
+```
+python src/iql_gym.py --env-id water-bomber --n-agents 2 --no-training --load-agents-from test --visualisation             
 ```
 
 
