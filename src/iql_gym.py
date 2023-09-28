@@ -67,7 +67,7 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     #parser.add_argument("--correct-prio-small-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
     #parser.add_argument("--correct-prio-big-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-    parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="")
     parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
@@ -446,7 +446,7 @@ class QAgent():
         actions = sample['actions']
 
         if self.params['add_id']: 
-            batch_id = self.one_hot_id.repeat(sample.shape[0], 1) #4*self.params['batch_size']
+            batch_id = self.one_hot_id.repeat(sample.shape[0], 1) #10*self.params['batch_size']
             obs = torch.cat((obs, batch_id), dim=-1).float()
             next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
         
@@ -524,9 +524,12 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
+            big_index = big_sample['index']
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
+            index = big_index[sample['index']][:,0]
+            writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes)
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
 
@@ -534,6 +537,7 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             big_sample = replay_buffer.sample()
             big_sample = add_ratios(big_sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
             sample = torch.stack([get_n_likeliest(big_sample[:,agent_id], params['filter'], params['batch_size']) for agent_id in range(n_agents)], dim=1)
+            writer.add_histogram('distribution centers', sample['index'].reshape(-1), completed_episodes)
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
         
@@ -808,6 +812,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
+        bs = replay_buffer._batch_size
         rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
         print("loading buffer from", rb_path)
@@ -817,6 +822,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         }
         snapshot.restore(app_state=target_state)
         print("Replay buffer saved to", rb_path)
+        replay_buffer._batch_size = bs
 
     ### Creating Agents
     q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
@@ -977,18 +983,18 @@ def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioriti
                 alpha = 1.0,
                 beta = 1.0,
                 priority_key="td_error",
-                batch_size=4*batch_size,
+                batch_size=10*batch_size,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
                 storage=rb_storage,
                 #priority_key="td_error",
-                batch_size=4*batch_size,
+                batch_size=10*batch_size,
             )
         
 
         if rb_type =='laber':
-            smaller_buffer_size = 4*batch_size
+            smaller_buffer_size = 10*batch_size
 
             smaller_buffer = TensorDictPrioritizedReplayBuffer(
                 alpha = 1.0,
