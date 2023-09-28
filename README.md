@@ -231,3 +231,5 @@ python src/iql_gym.py --env-id lbf  --enforce-coop --run-name train-from-big-buf
 python src/iql_gym.py --env-id lbf  --enforce-coop --run-name train-from-big-buf-laber --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf_big_coop --buffer-size 5000000 --rb laber --prio cur-past  --train-frequency 1 --total-timesteps 10000 --learning-starts 0 --device mps
 
 tensorboard --logdir=/Users/gardille/development/Water-Bomber-Env/results  --port 6008
+
+python src/iql_gym.py --env-id smac --use-state  --save-buffer --save-model --buffer-size 20_000_000 --rb prioritized --total-timesteps 100000 --correct-prio --run-name smac-big-rb-fit --correcr-prio
