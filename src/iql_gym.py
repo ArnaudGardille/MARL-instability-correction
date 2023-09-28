@@ -1021,8 +1021,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
 
             
-        if params['save_buffer'] and completed_episodes % params['buffer_size']==0:
+        if params['save_buffer'] and (completed_episodes % params['buffer_size'])==0:
             k = completed_episodes // params['buffer_size']
+            #if k != 0:
             rb_path = str(path/ run_name / 'rb' / str(k))
             os.makedirs(rb_path, exist_ok=True)
             """
@@ -1033,7 +1034,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
             state = {"state": replay_buffer}
             snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
-                    
+                
                 
     env.close() 
     visu_env.close()
