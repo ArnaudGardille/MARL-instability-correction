@@ -232,3 +232,8 @@ python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id lb
 
 python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state --buffer-size 1000000
 
+python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state  --rb laber --prio cur-past --buffer-on-disk  --buffer-size  200_000_000
+
+python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state --buffer-size  20
+
+python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state  --rb laber --prio cur-past   --buffer-size  20_000_000
