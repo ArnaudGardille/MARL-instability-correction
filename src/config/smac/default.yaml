@@ -29,12 +29,12 @@ tau: 1.
 evaluation_frequency: 100
 evaluation_episodes: 10
 target_network_frequency: 50
-batch_size:  10000 #2**18, #256, #
+batch_size:  1000 #2**18, #256, #
 start_e: 0.99
 end_e: 0.05
 exploration_fraction: 0.8
 learning_starts: 100
-train_frequency: 1
+train_frequency: 10
 single_agent: False
 add_id: False
 add_epsilon: False

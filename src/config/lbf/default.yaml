@@ -25,7 +25,7 @@ env_id: lbf
 random_policy: False
 no_training: False
 total_timesteps: 1000000
-learning_rate: 0.001
+learning_rate: 0.01
 buffer_size: 500000
 gamma: 0.99
 tau: 1.
@@ -37,7 +37,7 @@ start_e: 0.99
 end_e: 0.05
 exploration_fraction: 0.8
 learning_starts: 1000
-train_frequency: 100
+train_frequency: 10
 single_agent: False
 add_id: False
 add_epsilon: False
