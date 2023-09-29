@@ -1037,10 +1037,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             
         if params['save_buffer'] and completed_episodes % params['buffer_size']==0 and completed_episodes // params['buffer_size']!=0:
             k = completed_episodes // params['buffer_size']
-            rb_path = str(path/ run_name / 'rb')
+            rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
             os.makedirs(rb_path, exist_ok=True)
             #"""
-            rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
             #rb_path = path/ run_name / 'replay_buffer.pickle'
             torch.save(replay_buffer[:len(replay_buffer)], rb_path)
             #"""
@@ -1058,7 +1057,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         #rb_path = str(path/ run_name / 'rb' / 'final')
         #os.makedirs(rb_path, exist_ok=True)
         #"""
-        rb_path = path/ run_name / 'replay_buffer.pt'
+        k = (completed_episodes // params['buffer_size'])+1
+        rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
+        os.makedirs(rb_path, exist_ok=True)
         torch.save(replay_buffer[:len(replay_buffer)], rb_path)
         #with open(rb_path, 'wb') as handle:
         #"""
