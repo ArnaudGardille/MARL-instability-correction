@@ -57,6 +57,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("error", category=RuntimeWarning)
 scale = 0.25   
+acting_device = 'cpu' #GPU is only used for training
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -75,7 +76,8 @@ def parse_args():
         help="whether to save model into the `runs/{run_name}` folder")
     parser.add_argument("--plot-q-values", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether to plot the q values. only available for the water-bomber env")
-    parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True, default=False)
+    parser.add_argument("--visualisation", type=lambda x: bool(strtobool(x)), nargs="?", const=True, default=False,
+        help="Render the environment. Agents won't be trained.")
     parser.add_argument("--use-state", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="whether we give the global state to agents instead of their respective observation")
     parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
@@ -105,8 +107,6 @@ def parse_args():
     parser.add_argument("--load-buffer-from", type=str, default=None,
         help="the experiment from which to load agents.")
     parser.add_argument("--random-policy", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--no-training", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="Agents won't be trained")
     parser.add_argument("--total-timesteps", type=int, 
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float,
@@ -472,7 +472,7 @@ class QAgent():
         
         with torch.no_grad():
             obs = torch.Tensor(obs).float()
-            q_values = self.q_network(obs.to(self.device)).cpu()
+            q_values = self.q_network(obs.to(acting_device)).cpu()
 
             assert sum(avail_actions)>0, avail_actions
             considered_q_values = q_values + (avail_actions-1.0)*99999.0
@@ -488,8 +488,8 @@ class QAgent():
         return float(action)
     
     def train(self, sample, completed_episodes):
-
         sample = sample.to(self.device)
+
         obs = sample['observations'].float()
         action_mask = sample['action_mask']
         next_obs = sample['next_observations'].float()
@@ -647,6 +647,10 @@ def visualize_trajectory(env, agents, completed_episodes):
 
 
 def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, training, writer):
+    for q_agent in q_agents:
+        q_agent.q_network = q_agent.q_network.to(q_agent.device)
+        q_agent.target_network = q_agent.target_network.to(q_agent.device)
+
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
     n_agents = len(q_agents)
     
@@ -709,6 +713,10 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
     return q_agents
 
 def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False, writer=None):
+    for q_agent in q_agents:
+        q_agent.q_network = q_agent.q_network.to('cpu')
+        q_agent.target_network = q_agent.target_network.to('cpu')
+    
     if training:
         assert replay_buffer is not None
         if params['rb'] == 'laber':
@@ -944,7 +952,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
         #replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
-        rb_path = str(Path(params['load_buffer_from']) / 'replay_buffer.pt')
+        rb_path = str(Path(params['load_buffer_from'])/'rb') #/ 'replay_buffer.pt')
         """bs = replay_buffer._batch_size
         rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
@@ -956,11 +964,13 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         snapshot.restore(app_state=target_state)
         print("Replay buffer saved to", rb_path)
         replay_buffer._batch_size = bs"""
-        data = torch.load(rb_path)
+        for sub_rb_path in [ f.path for f in os.scandir(rb_path) if f.is_file() ]:
+            print("sub_rb_path", sub_rb_path)
+            data = torch.load(sub_rb_path)
+            replay_buffer.extend(data)
         #with open(rb_path, 'rb') as handle:
         #    data = pickle.load(handle)
 
-        replay_buffer.extend(data)
 
     ### Creating Agents
     q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
@@ -981,10 +991,11 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     pbar=trange(params['total_timesteps'])
     for completed_episodes in pbar:
         # Training episode
-        if not params['no_training']:
+        if not params['visualisation']:
+            q_agents = training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, True, writer)
             if not params['fixed_buffer']:
                 run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False, writer=writer)
-            q_agents = training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, True, writer)
+                
 
         # Evaluation episode
         if completed_episodes % params['evaluation_frequency'] == 0:
