@@ -247,3 +247,6 @@ python src/iql_gym.py  --total-timesteps 10000 --save-model --env-id smac --buff
 python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 2000000 --run-name full_medium_smac --save-buffer
 
  python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-coop-buffer --buffer-size 5000000  --total-timesteps 1000000 --batch-size 10000
+
+
+ python src/iql_gym.py --env-id lbf  --enforce-coop --run-name train-from-big-buf-laber --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf_big_coop --buffer-size 5000000 --rb laber --prio cur-past  --train-frequency 1 --total-timesteps 100000 --learning-starts 0 --learning-rate 0.001 --device cuda

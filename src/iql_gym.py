@@ -982,7 +982,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     for completed_episodes in pbar:
         # Training episode
         if not params['no_training']:
-            run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False, writer=writer)
+            if not params['fixed_buffer']:
+                run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False, writer=writer)
             q_agents = training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, True, writer)
 
         # Evaluation episode
