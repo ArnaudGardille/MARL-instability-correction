@@ -1037,14 +1037,12 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             
         if params['save_buffer'] and completed_episodes % params['buffer_size']==0 and completed_episodes // params['buffer_size']!=0:
             k = completed_episodes // params['buffer_size']
-            #rb_path = str(path/ run_name / 'rb' / str(k))
+            rb_path = str(path/ run_name / 'rb')
             os.makedirs(rb_path, exist_ok=True)
             #"""
-            rb_path = str(path/ run_name / 'rb' / 'replay_buffer_'+str(k)+'.pickle')
+            rb_path = str(rb_path / 'replay_buffer_'+str(k)+'.pickle')
             #rb_path = path/ run_name / 'replay_buffer.pickle'
-            pprint(replay_buffer[:len(replay_buffer)])
-            with open(rb_path, 'wb') as handle:
-                pickle.dump(replay_buffer[:len(replay_buffer)], handle)
+            torch.save(replay_buffer[:len(replay_buffer)], rb_path)
             #"""
             
 
