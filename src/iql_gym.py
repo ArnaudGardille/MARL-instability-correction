@@ -1040,7 +1040,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             #rb_path = str(path/ run_name / 'rb' / str(k))
             os.makedirs(rb_path, exist_ok=True)
             #"""
-            rb_path = str(path/ run_name / 'rb' / 'replay_buffer_'+str(k)+'.pickle')
+            rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pickle'))
             #rb_path = path/ run_name / 'replay_buffer.pickle'
             pprint(replay_buffer[:len(replay_buffer)])
             with open(rb_path, 'wb') as handle:
