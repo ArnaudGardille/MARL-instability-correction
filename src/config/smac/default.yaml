@@ -14,7 +14,7 @@ load_buffer_from:
     
 
     # Environment specific arguments
-n_agents: 10
+n_agents: 5
 n_actions: 18
 
     # Algorithm specific arguments

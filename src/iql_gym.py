@@ -564,16 +564,6 @@ class QAgent():
         pprint(self.__dict__)
         return ""
 
-    def load_rb(self):
-        env_type = "_det" if self.deterministic_env else "_rd"
-        add_eps = "_eps" if self.add_epsilon else ""
-        add_expl = "_expl" if self.add_others_explo else ""
-
-        path = Path.cwd() / 'rbs' / Path(str(self.agent_id)+env_type+add_eps+add_expl+'_replay_buffer.pickle')
-        with open(path, 'rb') as handle:
-            data = pickle.load(handle)
-
-        self.replay_buffer.extend(data)
 
     def get_td_error(self, sample):
 
@@ -953,7 +943,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
-        bs = replay_buffer._batch_size
+        #replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
+        rb_path = str(Path(params['load_buffer_from']) / 'replay_buffer.pt')
+        """bs = replay_buffer._batch_size
         rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
         print("loading buffer from", rb_path)
@@ -963,7 +955,12 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         }
         snapshot.restore(app_state=target_state)
         print("Replay buffer saved to", rb_path)
-        replay_buffer._batch_size = bs
+        replay_buffer._batch_size = bs"""
+        data = torch.load(rb_path)
+        #with open(rb_path, 'rb') as handle:
+        #    data = pickle.load(handle)
+
+        replay_buffer.extend(data)
 
     ### Creating Agents
     q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
@@ -1045,8 +1042,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             #"""
             rb_path = str(path/ run_name / 'rb' / 'replay_buffer_'+str(k)+'.pickle')
             #rb_path = path/ run_name / 'replay_buffer.pickle'
+            pprint(replay_buffer[:len(replay_buffer)])
             with open(rb_path, 'wb') as handle:
-                pickle.dump(replay_buffer[:], handle)
+                pickle.dump(replay_buffer[:len(replay_buffer)], handle)
             #"""
             
 
@@ -1060,11 +1058,11 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     # Savings
     if params['save_buffer']:
         #rb_path = str(path/ run_name / 'rb' / 'final')
-        os.makedirs(rb_path, exist_ok=True)
+        #os.makedirs(rb_path, exist_ok=True)
         #"""
-        rb_path = path/ run_name / 'replay_buffer.pickle'
-        with open(rb_path, 'wb') as handle:
-            pickle.dump(replay_buffer[:], handle)
+        rb_path = path/ run_name / 'replay_buffer.pt'
+        torch.save(replay_buffer[:len(replay_buffer)], rb_path)
+        #with open(rb_path, 'wb') as handle:
         #"""
         
 
