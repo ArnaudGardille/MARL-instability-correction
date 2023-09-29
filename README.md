@@ -237,3 +237,5 @@ python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id sm
 python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state --buffer-size  20
 
 python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id smac --save-buffer --save-model --use-state  --rb laber --prio cur-past   --buffer-size  20_000_000
+
+python /home/nono/Documents/Dassault/Water-Bomber-Env/src/iql_gym.py --env-id lbf --load-buffer-from /home/nono/Documents/Dassault/Water-Bomber-Env/results/lbf_big  --save-model --device cuda --total-timesteps 500000 --learning-starts 0 --train-frequency 1 --learning-rate 0.0001 --fixed-buffer --enforce-coop

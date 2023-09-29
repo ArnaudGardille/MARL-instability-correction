@@ -67,7 +67,7 @@ def parse_args():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     #parser.add_argument("--correct-prio-small-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
     #parser.add_argument("--correct-prio-big-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-    parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="")
     parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
@@ -273,9 +273,9 @@ def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioriti
         shutil.rmtree(path)
         os.makedirs(path, exist_ok=True)
         print("Replay buffer location:", path/'replay_buffer')
-        rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
+        rb_storage = LazyMemmapStorage(buffer_size, device=device, scratch_dir=path/'replay_buffer')
     else:
-        rb_storage = LazyTensorStorage(buffer_size, device='cpu')
+        rb_storage = LazyTensorStorage(buffer_size, device=device)
     if rb_type == 'uniform' or rb_type == 'correction':
         replay_buffer = TensorDictReplayBuffer(
             storage=rb_storage,
@@ -938,6 +938,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
     if params['load_buffer_from'] is not None:
+        
         rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
         
         print("loading buffer from", rb_path)
