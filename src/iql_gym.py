@@ -97,7 +97,7 @@ def parse_args():
     parser.add_argument("--t-max", type=int, help="Maximum episode duration")
     parser.add_argument("--n-agents", type=int)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s_vs_1sc'
+    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z'
         ,help="Select the map when using SMAC")
     # Algorithm specific arguments
     parser.add_argument("--load-agents-from", type=str, default=None,
@@ -325,7 +325,10 @@ class QAgent():
 
         return probability.cpu()
 
-    def act(self, obs, avail_actions, epsilon=None, others_explo=None, training=True):
+    def act(self, obs, avail_actions, others_explo=None, training=True):
+        """
+        Greedy action
+        """
         if self.params['add_id']:   
             obs = torch.cat((obs, self.one_hot_id), dim=-1).float()
         
@@ -446,7 +449,7 @@ class QAgent():
         actions = sample['actions']
 
         if self.params['add_id']: 
-            batch_id = self.one_hot_id.repeat(sample.shape[0], 1) #10*self.params['batch_size']
+            batch_id = self.one_hot_id.repeat(sample.shape[0], 1).to(self.device) #10*self.params['batch_size']
             obs = torch.cat((obs, batch_id), dim=-1).float()
             next_obs = torch.cat((next_obs, batch_id), dim=-1).float()
         
@@ -596,8 +599,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     n_next_obs = None
     n_previous_action_mask = None
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
-    if not training:
-        epsilon = 0.0
+    #if not training:
+    #    epsilon = 0.0
 
     n_obs = torch.tensor(n_obs)
 
@@ -638,8 +641,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
                 action = np.random.choice(avail_actions_ind).reshape(-1)
                 probability = epsilon/sum(avail_actions)
             else:
-                action = q_agents[agent_id].act(obs, avail_actions, epsilon, others_explo=n_other_act_randomly[agent_id])
-                probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) if training else 1.0
+                action = q_agents[agent_id].act(obs, avail_actions, others_explo=n_other_act_randomly[agent_id])
+                probability = 1.0-epsilon*(sum(avail_actions)-1)/sum(avail_actions) #if training else 1.0
 
             assert probability > 0.0 , (probability, epsilon)
             
@@ -897,18 +900,20 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
 
             
-        if params['save_buffer'] and completed_episodes % params['buffer_size']==0:
+        if params['save_buffer'] and completed_episodes % params['buffer_size']==0 and completed_episodes // params['buffer_size']!=0:
             k = completed_episodes // params['buffer_size']
-            rb_path = str(path/ run_name / 'rb' / str(k))
+            #rb_path = str(path/ run_name / 'rb' / str(k))
             os.makedirs(rb_path, exist_ok=True)
-            """
-            rb_path = path/ run_name / 'replay_buffer.pickle'
+            #"""
+            rb_path = str(path/ run_name / 'rb' / 'replay_buffer_'+str(k)+'.pickle')
+            #rb_path = path/ run_name / 'replay_buffer.pickle'
             with open(rb_path, 'wb') as handle:
-                pickle.dump(replay_buffer[:], handle)"""
+                pickle.dump(replay_buffer[:], handle)
+            #"""
             
 
-            state = {"state": replay_buffer}
-            snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
+            #state = {"state": replay_buffer}
+            #snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
                     
                 
     env.close() 
@@ -916,16 +921,17 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     # Savings
     if params['save_buffer']:
-        rb_path = str(path/ run_name / 'rb' / 'final')
+        #rb_path = str(path/ run_name / 'rb' / 'final')
         os.makedirs(rb_path, exist_ok=True)
-        """
+        #"""
         rb_path = path/ run_name / 'replay_buffer.pickle'
         with open(rb_path, 'wb') as handle:
-            pickle.dump(replay_buffer[:], handle)"""
+            pickle.dump(replay_buffer[:], handle)
+        #"""
         
 
-        state = {"state": replay_buffer}
-        snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
+        #state = {"state": replay_buffer}
+        #snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
         print("Replay buffer saved to", rb_path)
             
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]    
@@ -958,9 +964,9 @@ def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioriti
         shutil.rmtree(path)
         os.makedirs(path, exist_ok=True)
         print("Replay buffer location:", path/'replay_buffer')
-        rb_storage = LazyMemmapStorage(buffer_size, device='cpu', scratch_dir=path/'replay_buffer')
+        rb_storage = LazyMemmapStorage(buffer_size, device=device, scratch_dir=path/'replay_buffer')
     else:
-        rb_storage = LazyTensorStorage(buffer_size, device='cpu')
+        rb_storage = LazyTensorStorage(buffer_size, device=device)
     if rb_type == 'uniform' or rb_type == 'correction':
         replay_buffer = TensorDictReplayBuffer(
             storage=rb_storage,
