@@ -234,7 +234,8 @@ tensorboard --logdir=/Users/gardille/development/Water-Bomber-Env/results  --por
 
 python src/iql_gym.py --env-id smac --use-state  --save-buffer --save-model --buffer-size 200_000_000 --total-timesteps 1000000  --run-name smac-big-rb-fit 
 
-python src/iql_gym.py  --total-timesteps 10000 --save-model --env-id smac --buffer-size 2000000 --run-name full_small_smac --save-buffer --rb laber --prio cur-past --device cuda 
+python src/iql_gym.py  --total-timesteps 100000 --save-model --env-id smac --buffer-size 2000000 --run-name full_small_smac --save-buffer --rb laber --prio cur-past --device cuda 
+
 python src/iql_gym.py --env-id smac --use-state  --save-buffer --save-model --buffer-size 20_000_000 --rb prioritized --total-timesteps 100000 --correct-prio --run-name smac-big-rb-fit --correcr-prio
 
 python src/iql_gym.py --env-id lbf  --enforce-coop --save-buffer --save-model --run-name lbf-coop-buffer --buffer-size 5000000 --rb laber --prio cur-past --total-timesteps 100000 

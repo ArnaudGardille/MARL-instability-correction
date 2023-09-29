@@ -1040,7 +1040,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             rb_path = str(path/ run_name / 'rb')
             os.makedirs(rb_path, exist_ok=True)
             #"""
-            rb_path = str(rb_path / 'replay_buffer_'+str(k)+'.pickle')
+            rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
             #rb_path = path/ run_name / 'replay_buffer.pickle'
             torch.save(replay_buffer[:len(replay_buffer)], rb_path)
             #"""
