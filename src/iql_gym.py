@@ -92,15 +92,15 @@ def parse_args():
     # Environment specific arguments
     parser.add_argument("--enforce-coop", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="Coop version for lbf, and mix up rewards for simultaneous")
-    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac', 'lbf'] ,default='simultaneous',
+    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac', 'lbf', 'mpe'] ,default='simultaneous',
         help="the id of the environment")
     parser.add_argument("--x-max", type=int, help="Only for the water-bomber env")
     parser.add_argument("--y-max", type=int, help="Only for the water-bomber env")
     parser.add_argument("--t-max", type=int, help="Maximum episode duration")
     parser.add_argument("--n-agents", type=int)
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="?", const=True, default='2s3z'
-        ,help="Select the map when using SMAC")
+    parser.add_argument("--map", type=str, nargs="?", const=True, 
+        help="Select the map.  For SMAC: ['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2']. For MPE: ['adversary', 'crypto', 'push', 'reference', 'speaker_listener', 'spread', 'tag', 'world_comm', 'simple']")
     # Algorithm specific arguments
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
@@ -358,9 +358,25 @@ def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, w
 
     return sample
 
+def make_env(scenario_name, benchmark=False):
+    '''
+    Only for MPE
+    '''
+    from mpe.environment import MultiAgentEnv
+    import mpe.scenarios as scenarios
 
+    # load scenario from script
+    scenario = scenarios.load(scenario_name + ".py").Scenario()
+    # create world
+    world = scenario.make_world()
+    # create multiagent environment
+    if benchmark:        
+        env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
+    else:
+        env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
+    return env
 
-def create_env(env_id, params):
+def create_env(env_id, params, render_mode=None):
     if env_id == 'simultaneous':
         from myenvs.simultaneous_attack import SimultaneousEnv
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])#, common_reward=params['enforce_coop'])
@@ -368,6 +384,7 @@ def create_env(env_id, params):
         from myenvs.water_bomber import WaterBomberEnv
         env = WaterBomberEnv(x_max=params['x_max'], y_max=params['y_max'], t_max=params['t_max'], n_agents=params['n_agents'], obs_normalization=params['env_normalization'], deterministic=params['deterministic_env'], add_id=params['add_id'])
     elif env_id == 'smac':
+        assert params['map'] in ['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2']
         import smaclite  
         env = gym.make(f"smaclite/"+params['map'])
     elif env_id == 'lbf':
@@ -377,6 +394,9 @@ def create_env(env_id, params):
         env_name = "Foraging-5x5-"+n_agents+"p-"+n_agents+"f-"+coop+"v2"
         print("env_name:", env_name)
         env = gym.make(env_name)
+    elif env_id == 'mpe':
+        assert params['map'] in ['simple_adversary', 'simple_crypto', 'simple_push', 'simple_reference', 'simple_speaker_listener', 'simple_spread', 'simple_tag', 'simple_world_comm', 'simple']
+        return make_env(params['map'])
     else:
         raise NameError('Unknown env:'+env_id)
     
@@ -678,7 +698,8 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
         
         else:
             sample = replay_buffer.sample()
-            sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
+            if not (params['env_id'] == 'mpe' and params['map'] == 'simple'):
+                sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
         #samples = [sample for _ in range(n_agents)]
         weights = torch.ones((len(sample),n_agents))
@@ -793,7 +814,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         n_previous_action_mask = n_action_mask
         n_action = [int(a) for a in n_action]
-        n_next_obs, n_reward, n_terminated, info = env.step(n_action)
+        n_next_obs, n_reward, n_terminated, n_truncated, info = env.step(n_action)
+        n_terminated = n_terminated or n_truncated
 
         n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
         n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
@@ -917,13 +939,15 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         try:
             obs_shape = env.observation_space[-1].shape
         except:
-            obs_shape = env.observation_space(0).shape
+            #obs_shape = env.observation_space(0).shape
+            obs_shape = list(env.observation_space(0).values())[0].shape
         
     size_obs = int(np.product(obs_shape))
     
     try:
         size_act = int(env.action_space[-1].n)
     except:
+        #size_act = int(env.action_space(0).n)
         size_act = int(env.action_space(0).n)
     
     ## Increasing the state size for state augmentation
@@ -1024,6 +1048,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             average_duration /= params['evaluation_episodes']
             agents_total_rewards = np.array(agents_total_rewards)
             agents_total_rewards = np.mean(agents_total_rewards, axis=0).squeeze()
+            if params['env_id'] == 'mpe' and params['map'] == 'simple':
+                agents_total_rewards = [agents_total_rewards]
 
             for a in range(len(q_agents)):
                 writer.add_scalar(str(a)+"/Average Return", agents_total_rewards[a], completed_episodes)

@@ -36,9 +36,9 @@ def parse_args():
     parser.add_argument("--t-max", type=int)
     parser.add_argument("--n-agents", type=int, nargs="*")
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="*")
-    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac', 'lbf'] ,default='simultaneous',
+    parser.add_argument("--env-id", choices=['simultaneous', 'water-bomber', 'smac', 'lbf', 'mpe'] ,default='simultaneous',
         help="the id of the environment")
-    parser.add_argument("--map", choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2'], nargs="*"
+    parser.add_argument("--map", type=str, nargs="*" #choices=['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2']
         ,help="Select the map when using SMAC")
     parser.add_argument("--enforce-coop", type=lambda x: bool(strtobool(x)), nargs="*",
         help="Coop version for lbf, and mix up rewards for simultaneous")
