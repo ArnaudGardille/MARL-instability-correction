@@ -988,10 +988,14 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         snapshot.restore(app_state=target_state)
         print("Replay buffer saved to", rb_path)
         replay_buffer._batch_size = bs"""
-        for sub_rb_path in [ f.path for f in os.scandir(rb_path) if f.is_file() ]:
+
+        list_paths = [ f.path for f in os.scandir(rb_path) if f.is_file() ]
+        frac = params['buffer_size'] / len(list_paths)
+
+        for sub_rb_path in list_paths:
             print("sub_rb_path", sub_rb_path)
             data = torch.load(sub_rb_path)
-            replay_buffer.extend(data)
+            replay_buffer.extend(data[:frac])
         #with open(rb_path, 'rb') as handle:
         #    data = pickle.load(handle)
 
