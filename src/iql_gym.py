@@ -990,7 +990,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         replay_buffer._batch_size = bs"""
 
         list_paths = [ f.path for f in os.scandir(rb_path) if f.is_file() ]
-        frac = params['buffer_size'] / len(list_paths)
+        frac = int(params['buffer_size'] / len(list_paths))
 
         for sub_rb_path in list_paths:
             print("sub_rb_path", sub_rb_path)
