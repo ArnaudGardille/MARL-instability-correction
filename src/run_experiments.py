@@ -43,6 +43,8 @@ def parse_args():
     parser.add_argument("--enforce-coop", type=lambda x: bool(strtobool(x)), nargs="*",
         help="Coop version for lbf, and mix up rewards for simultaneous")
     # Algorithm specific arguments
+    parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="Nothing will be added to the buffer(only useful if it has been loaded)")
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
     parser.add_argument("--load-buffer-from", type=str, default=None,
@@ -56,6 +58,8 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--buffer-size", type=int, nargs="*",
         help="the replay memory buffer size")
+    parser.add_argument("--buffer-on-disk", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
+        help="The buffer will be stored on disk. Useful if it is to big to fit in the RAM.")
     parser.add_argument("--gamma", type=float, nargs="*",
         help="the discount factor")
     parser.add_argument("--tau", type=float, help="the target network update rate")

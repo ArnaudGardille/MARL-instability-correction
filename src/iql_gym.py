@@ -901,8 +901,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     for k, v in args.items():
         if v is not None:
             params[k] = v
-    if __name__ == "__main__":
-        pprint(params)
+    #if __name__ == "__main__":
+    pprint(params)
     old_params = copy(params)
 
     if params['device'] == "cuda" and torch.cuda.is_available():
@@ -973,7 +973,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     else:
         rb_path = path
     
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device='cpu', prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None) #params['device']
     if params['load_buffer_from'] is not None:
         #replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
         rb_path = str(Path(params['load_buffer_from'])/'rb') #/ 'replay_buffer.pt')
@@ -990,7 +990,8 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         replay_buffer._batch_size = bs"""
 
         list_paths = [ f.path for f in os.scandir(rb_path) if f.is_file() ]
-        frac = params['buffer_size'] / len(list_paths)
+        list_paths.sort()
+        frac = int(params['buffer_size'] / len(list_paths))
 
         for sub_rb_path in list_paths:
             print("sub_rb_path", sub_rb_path)
@@ -1079,7 +1080,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
         stored_transitions = completed_episodes*params['t_max']    
         if params['save_buffer'] and (stored_transitions % params['buffer_size'])==0 and (stored_transitions // params['buffer_size'])!=0:
-            k = stored_transitions // params['buffer_size']
+            k = (stored_transitions // params['buffer_size'])-1
             os.makedirs(path/ run_name / 'rb', exist_ok=True)
             rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
             #"""
@@ -1104,7 +1105,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         #os.makedirs(rb_path, exist_ok=True)
         #"""
         os.makedirs(path/ run_name / 'rb', exist_ok=True)
-        k = (stored_transitions // params['buffer_size'])+1
+        k = (stored_transitions // params['buffer_size'])
         rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
         torch.save(replay_buffer[:len(replay_buffer)], rb_path)
         #with open(rb_path, 'wb') as handle:
