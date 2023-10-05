@@ -264,3 +264,6 @@ python src/run_experiments.py --rb likely --prio cur-past  cur --env-id smac --f
 
 python src/run_experiments.py --env-id smac --rb laber --prio cur-past  cur --correct-prio False  --fixed-buffer --load-buffer-from /home/nono/Documents/Dassault/Water-Bomber-Env/results/full_medium_smac_2023-10-03_12:23:02  --train-frequency 1 --total-timesteps 100_000 --learning-starts 0 --learning-rate 0.001 --batch-size 1000 --buffer-size 6_000_000 
 --buffer-on-disk --device cuda
+ python src/iql_gym.py --env-id smac  --run-name train-from-big-buf-laber-smac --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/full_small_smac_2023-10-01_05:16:43  --train-frequency 1 --total-timesteps 100000 --learning-starts 0 --learning-rate 0.001 --device mps
+
+ python src/iql_gym.py --env-id lbf  --enforce-coop --run-name train-from-big-buf-laber --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf_big_coop --buffer-size 5000000 --rb laber --prio cur-past  --train-frequency 1 --total-timesteps 100000 --learning-starts 0 --learning-rate 0.001 --device cuda
