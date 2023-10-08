@@ -182,7 +182,7 @@ python src/iql_gym.py --save-model --env-id smac --n-agents 5 --buffer-size 1000
 python iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000
 python src/iql_gym.py --save-model --env-id smac --n-agents 5 --total-timesteps 100000 --buffer-size 10000000
 
-python src/iql_gym.py --env-id smac --n-agents 5 --no-training --load-agents-from test --visualisation
+python src/iql_gym.py --env-id smac --n-agents 5  --load-agents-from test --visualisation
 
 python src/iql_gym.py  --save-model --env-id smac --total-timesteps 100000 --map MMM2 --buffer-size 10000000
 
@@ -270,3 +270,4 @@ python src/run_experiments.py --env-id smac --rb laber --prio cur-past  cur --co
  python src/iql_gym.py --env-id lbf  --enforce-coop --run-name train-from-big-buf-laber --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf_big_coop --buffer-size 5000000 --rb laber --prio cur-past  --train-frequency 1 --total-timesteps 100000 --learning-starts 0 --learning-rate 0.001 --device cuda
 
 bash bash/eval_prios.bash
+python src/run_experiments.py --env-id lbf --rb laber --prio cur-past  cur --correct-prio False  --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf-coop-buffer_2023-09-30_13:58:50  --train-frequency 1 --total-timesteps 100_000 --learning-starts 0 --learning-rate 0.001 --batch-size 1000 --buffer-size 15_000_000
