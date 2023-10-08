@@ -271,3 +271,5 @@ python src/run_experiments.py --env-id smac --rb laber --prio cur-past  cur --co
 
 bash bash/eval_prios.bash
 python src/run_experiments.py --env-id lbf --rb laber --prio cur-past  cur --correct-prio False  --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf-coop-buffer_2023-09-30_13:58:50  --train-frequency 1 --total-timesteps 100_000 --learning-starts 0 --learning-rate 0.001 --batch-size 1000 --buffer-size 15_000_000
+
+python src/iql_gym.py --env-id mpe  --map simple_spread --enforce-coop --save-buffer --save-model --run-name mpe-spread-buffer --buffer-size 2500000 --rb laber --prio cur-past --total-timesteps 100000 

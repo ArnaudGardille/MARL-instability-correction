@@ -58,7 +58,7 @@ clip_correction_after:
 filter: cur-past
 
 prioritize_big_buffer: False
-t_max: 50
+t_max: 25
 verbose: False
 visualisation: False
 fixed_buffer: False
