@@ -83,6 +83,7 @@ def parse_args():
     parser.add_argument("--save-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="saves the replay buffer inside the experiment folder")
     parser.add_argument("--run-name", type=str, default=None)
+    parser.add_argument("--last-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--fixed-buffer", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
         help="Nothing will be added to the buffer(only useful if it has been loaded)")
     parser.add_argument("--buffer-on-disk", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
@@ -495,14 +496,14 @@ class QAgent():
             q_values = self.q_network(obs.to(acting_device)).cpu()
 
             assert sum(avail_actions)>0, avail_actions
-            considered_q_values = q_values + (avail_actions-1.0)*99999.0
+            considered_q_values = q_values + (avail_actions-1.0)*1e10
             action = torch.argmax(considered_q_values).reshape(1)
 
         avail_actions = torch.tensor(avail_actions)
         avail_actions_ind = np.nonzero(avail_actions).reshape(-1)
 
         if int(action) not in avail_actions_ind:
-            print("Unavailable action was choosen!")
+            #print("Unavailable action was choosen!")
             action = torch.tensor([np.random.choice(avail_actions_ind)])
 
         return float(action)
@@ -684,7 +685,23 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
             index = big_index[sample['index']][:,0]
-            writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes)
+            #writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes, bins=10)
+
+            values = np.array(index).astype(float).reshape(-1)
+            counts, limits= np.histogram(values, bins=10, range=(0.0, params['buffer_size']))
+
+            sum_sq = values.dot(values)
+            writer.add_histogram_raw(
+                tag='distribution centers',
+                min=values.min(),
+                max=values.max(),
+                num=len(values),
+                sum=values.sum(),
+                sum_squares=sum_sq,
+                bucket_limits=limits[1:].tolist(),
+                bucket_counts=counts.tolist(),
+                global_step=completed_episodes)
+            writer.flush()
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
 
@@ -702,6 +719,7 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
                 sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
         #samples = [sample for _ in range(n_agents)]
+        #writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes)
         weights = torch.ones((len(sample),n_agents))
 
         if '_weight' in sample.keys() and params['correct_prio']:
@@ -991,12 +1009,17 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
         list_paths = [ f.path for f in os.scandir(rb_path) if f.is_file() ]
         list_paths.sort()
-        frac = int(params['buffer_size'] / len(list_paths))
 
-        for sub_rb_path in list_paths:
-            print("sub_rb_path", sub_rb_path)
-            data = torch.load(sub_rb_path)
-            replay_buffer.extend(data[:frac])
+        if params['last_buffer']:
+            data = torch.load(list_paths[-1])
+            replay_buffer.extend(data)
+        else:
+            frac = int(params['buffer_size'] / len(list_paths))+1
+
+            for sub_rb_path in list_paths:
+                print("sub_rb_path", sub_rb_path)
+                data = torch.load(sub_rb_path)
+                replay_buffer.extend(data[:frac])
         #with open(rb_path, 'rb') as handle:
         #    data = pickle.load(handle)
 
