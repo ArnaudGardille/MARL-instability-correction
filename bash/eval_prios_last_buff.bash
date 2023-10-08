@@ -1,8 +1,10 @@
 #!/bin/bash
 
-names=('laber_cur-past_uncorrected' 'laber_cur_uncorrected' 'laber_cur-past' 'laber_cur' 'uniform' )
-configs=('--rb laber --prio cur-past' '--rb laber --prio cur' '--rb laber --prio cur-past --correct-prio' '--rb laber --prio cur --correct-prio' '--rb uniform')
+#names=('laber_cur-past_uncorrected' 'laber_cur_uncorrected' 'laber_cur-past' 'laber_cur' 'uniform' )
+#configs=('--rb laber --prio cur-past' '--rb laber --prio cur' '--rb laber --prio cur-past --correct-prio' '--rb laber --prio cur --correct-prio' '--rb uniform')
 
+names=('likely_cur-past' 'likely_cur' 'uniform')
+configs=('--rb likely --prio cur-past' '--rb likely --prio cur' '')
 
 for ((run=0; run<1; run+=1)); do
   #for prio in "${prios[@]}"; do
