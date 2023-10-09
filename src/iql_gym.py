@@ -687,7 +687,7 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             index = big_index[sample['index']][:,0]
             #writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes, bins=10)
 
-            values = np.array(index).astype(float).reshape(-1)
+            """values = np.array(index).astype(float).reshape(-1)
             counts, limits= np.histogram(values, bins=10, range=(0.0, params['buffer_size']))
 
             sum_sq = values.dot(values)
@@ -700,7 +700,8 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
                 sum_squares=sum_sq,
                 bucket_limits=limits[1:].tolist(),
                 bucket_counts=counts.tolist(),
-                global_step=completed_episodes)
+                global_step=completed_episodes)"""
+            writer.add_histogram('distribution centers', sample['index'].reshape(-1), completed_episodes)
             writer.flush()
             if params['prioritize_big_buffer']:
                 replay_buffer.update_tensordict_priority(big_sample)
@@ -1000,7 +1001,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             data = data[:id_max]
         replay_buffer.extend(data)
     
-    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device='cpu', prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None) #params['device']
+    replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None) #
     if params['load_buffer_from'] is not None:
         #replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
         rb_path = str(Path(params['load_buffer_from'])/'rb') #/ 'replay_buffer.pt')
