@@ -158,7 +158,7 @@ def parse_args():
         ,help="function that will be applied to the loss correction")
     parser.add_argument("--clip-correction-after", type=float, nargs="?", const=True
         ,help="Allows to clip the correction")
-    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], default='uniform',
+    parser.add_argument("--rb", choices=['uniform', 'prioritized', 'laber', 'likely', 'correction'], 
         help="whether to use a uniform, prioritized, Laber of Likely replay buffer.")
     parser.add_argument("--add-others-explo", type=lambda x: bool(strtobool(x)), nargs="?", const=True
         ,help="whether to add a boolean vector of wheter each other agent is exploring to observation")
@@ -990,6 +990,15 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         rb_path = Path(params['load_buffer_from'])
     else:
         rb_path = path
+
+    def add_to_rb(rb, path, id_max=None):
+        data = torch.load(list_paths[-1])
+        non_empty_mask = data['observations'].abs().sum(dim=2).bool().reshape(-1)
+        
+        data = data[non_empty_mask]
+        if id_max is not None:
+            data = data[:id_max]
+        replay_buffer.extend(data)
     
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device='cpu', prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None) #params['device']
     if params['load_buffer_from'] is not None:
@@ -1011,15 +1020,13 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         list_paths.sort()
 
         if params['last_buffer']:
-            data = torch.load(list_paths[-1])
-            replay_buffer.extend(data)
+            add_to_rb(replay_buffer, list_paths[-1])
         else:
             frac = int(params['buffer_size'] / len(list_paths))+1
 
             for sub_rb_path in list_paths:
                 print("sub_rb_path", sub_rb_path)
-                data = torch.load(sub_rb_path)
-                replay_buffer.extend(data[:frac])
+                add_to_rb(replay_buffer, sub_rb_path, frac)
         #with open(rb_path, 'rb') as handle:
         #    data = pickle.load(handle)
 
