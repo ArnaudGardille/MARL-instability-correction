@@ -271,6 +271,8 @@ python src/run_experiments.py --env-id smac --rb laber --prio cur-past  cur --co
 
 bash bash/eval_prios.bash
 bash bash/eval_prios_last_buff.bash
+bash bash/eval_prios_lbf.bash
+bash bash/eval_prios_last_buff_lbf.bash
 
 python src/run_experiments.py --env-id lbf --rb laber --prio cur-past  cur --correct-prio False  --fixed-buffer --load-buffer-from /Users/gardille/development/Water-Bomber-Env/results/lbf-coop-buffer_2023-09-30_13:58:50  --train-frequency 1 --total-timesteps 100_000 --learning-starts 0 --learning-rate 0.001 --batch-size 1000 --buffer-size 15_000_000
 

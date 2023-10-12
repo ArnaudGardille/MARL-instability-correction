@@ -994,9 +994,9 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     def add_to_rb(rb, path, id_max=None):
         data = torch.load(list_paths[-1])
-        non_empty_mask = data['observations'].abs().sum(dim=2).bool().reshape(-1)
+        #non_empty_mask = data['observations'].abs().sum(dim=2).bool().reshape(-1)
         
-        data = data[non_empty_mask]
+        #data = data[non_empty_mask]
         if id_max is not None:
             data = data[:id_max]
         replay_buffer.extend(data)
