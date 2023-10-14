@@ -284,3 +284,7 @@ python src/iql_gym.py --env-id water-bomber  --save-buffer --save-model --run-na
 
 python src/iql_gym.py --env-id smac --n-agents 5  --load-agents-from /Users/gardille/development/Water-Bomber-Env/results/full_small_smac_2023-10-01_05:16:43 --visualisation
 
+bash bash/eval_prios_last_buff_smac.bash
+bash bash/eval_prios_last_buff_lbf.bash
+bash bash/eval_prios_lbf.bash
+bash bash/eval_prios_smac.bash
