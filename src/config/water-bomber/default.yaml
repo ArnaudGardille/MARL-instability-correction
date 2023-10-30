@@ -27,7 +27,7 @@ random_policy: False
 no_training: False
 total_timesteps: 100000
 learning_rate: 0.01
-buffer_size: 2000000
+buffer_size: 200000
 gamma: 0.9
 tau: 1.
 evaluation_frequency: 1000

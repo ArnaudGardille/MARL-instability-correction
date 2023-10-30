@@ -876,7 +876,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         #if training: On ajoute au rb meme quand on explore pas
 
-        if replay_buffer is not None and not params['fixed_buffer']:    
+        if training and (replay_buffer is not None and not params['fixed_buffer']):    
             for previous_action_mask, action_mask in zip(n_previous_action_mask, n_action_mask):
                 assert sum(previous_action_mask) > 0 
                 assert sum(action_mask) > 0 
