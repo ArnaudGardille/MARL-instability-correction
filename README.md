@@ -292,3 +292,9 @@ bash bash/eval_prios_smac.bash
 
 python src/run_experiments.py --env-id lbf --rb laber --prio cur-past  cur --correct-prio False  --fixed-buffer --load-buffer-from /home/nono/Documents/Dassault/Water-Bomber-Env/results/full_medium_smac_2023-10-03_12:23:02  --train-frequency 1 --total-timesteps 100_000 --load-agents-from likely_cur-smac-last_buff-0_2023-10-15_19:24:21
 python src/iql_gym.py --env-id smac --n-agents 5  --load-agents-from /Users/gardille/development/Water-Bomber-Env/results/full_medium_smac --visualisation
+
+
+python src/iql_gym.py --env-id smac --n-agents 5  --load-buffer-from /home/nono/Documents/Dassault/Water-Bomber-Env/results/full_medium_smac --total-timesteps 100000 --learning-starts 0  --train-frequency 1  --fixed-buffer --rb laber --prio cur --learning-rate 0.0001 --batch-size 1000 --buffer-size 2000000 --device cuda  
+
+
+python src/iql_gym.py --env-id smac --n-agents 5  --load-buffer-from /home/nono/Documents/Dassault/Water-Bomber-Env/results/full_medium_smac --total-timesteps 100000 --learning-starts 0  --train-frequency 1  --fixed-buffer --rb laber --prio cur --learning-rate 0.00001 --batch-size 1000 --buffer-size 2000000 --last-buffer --run-name laber-cur-last_buff-0.00001
