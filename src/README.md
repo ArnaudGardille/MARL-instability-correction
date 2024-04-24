@@ -1,5 +1,5 @@
-# Files description.
+## File Descriptions
 
-- iql_gym.py : Runs a single training.
-- remake_plots.py : Allows to modify things in the experiment folder and remake the plots.
-- run_experiments.py : Average the results over several training runs, run experiments with different parameters, and plot the results.
+* **iql_gym.py:** This script executes a single training session. 
+* **remake_plots.py:** This script allows you to regenerate any associated plots after you modified files within an experiment directory
+* **run_experiments.py:** This script automates running multiple training experiments. It can average results across multiple runs, experiment with different parameters, and generate plots to visualize the results.
