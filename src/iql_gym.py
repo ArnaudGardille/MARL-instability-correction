@@ -164,13 +164,17 @@ def parse_args():
 
 def weighted_mse_loss(predicted, target, weight):
     """
-    Allows to weight the MSE.
+    Calculates the weighted mean squared error between predicted and target values.
     """
     return (weight * (predicted - target) ** 2).mean()
 
 class QNetwork(nn.Module):
     """
-    Neural network that approxiates the Q function.
+    A neural network architecture for approximating the Q-value function.
+
+    Args:
+        obs_shape: The shape of the observation input to the network.
+        act_shape: The number of discrete actions available to the agent.
     """
     def __init__(self, obs_shape, act_shape):
         super(QNetwork, self).__init__()
@@ -183,11 +187,24 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Forward pass through the network.
+
+        Args:
+            x: A tensor representing the agent's observation.
+
+        Returns:
+            A tensor representing the predicted Q-values for all actions.
+        """
         return self.network(x)
 
 class DuelingQNetwork(nn.Module):
     """
-    Neural network that approxiates the Q function with dueling architecture.
+    A neural network architecture for approximating the Q-value function with a Dueling architecture.
+
+    Args:
+        obs_shape: The shape of the observation input to the network.
+        act_shape: The number of discrete actions available to the agent.
     """
     def __init__(self, obs_shape, act_shape):
         super(DuelingQNetwork, self).__init__()
@@ -201,6 +218,16 @@ class DuelingQNetwork(nn.Module):
         self.adv = nn.Linear(256, act_shape)
 
     def forward(self, state, value_only=False):
+        """
+        Forward pass through the network.
+
+        Args:
+            state: A tensor representing the agent's observation.
+            value_only: A boolean flag indicating whether to return only the value estimate.
+
+        Returns:
+            A tensor representing the Q-values for all actions (or just the value estimate if value_only is True).
+        """
         y = self.relu(self.fc1(state))
         value = self.relu(self.fc_value(y))
         adv = self.relu(self.fc_adv(y))
@@ -457,10 +484,10 @@ class StateWrapper(ObservationWrapper):
         return self.env.get_state()
 
 class QAgent():
-    """
-    Class for the Agents.
-    """
     def __init__(self, env, agent_id, params, obs_shape, act_shape, writer, experiment_hash=None):
+        """
+        Initializes the agent with necessary parameters.
+        """
         for k, v in params.items():
             if k=='none':
                 setattr(self, None, v)
@@ -515,8 +542,15 @@ class QAgent():
 
     def act(self, obs, avail_actions, others_explo=None, training=True):
         """
-        Sample an action in an epsilon greedy fashion.
+        Selects an action based on the estimated Q-values for the current observation in an epsilon greedy fashion.
+
+        Args:
+            obs: A tensor representing the agent's observation.
+
+        Returns:
+            An integer representing the chosen action.
         """
+
         if self.params['add_id']:   
             obs = torch.cat((obs, self.one_hot_id), dim=-1).float()
         
@@ -719,8 +753,11 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
     n_agents = len(q_agents)
     
+    # Entrainement
     if training and completed_episodes > params['learning_starts'] and completed_episodes % params['train_frequency'] == 0:
         maybe_writer = writer if completed_episodes % params['evaluation_frequency'] == 0 else None
+        
+        # On agit selon le type du replay buffer.
         if params['rb'] =='laber':
             # On met a jour les TD errors 
             big_sample = replay_buffer.sample()
@@ -892,7 +929,7 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
 
         episode_reward += np.array(n_reward).squeeze()
 
-        # Si training: On ajoute au rb meme quand on explore pas
+        # Si 'training': On ajoute au rb meme quand on explore pas
         if training and (replay_buffer is not None and not params['fixed_buffer']):    
             for previous_action_mask, action_mask in zip(n_previous_action_mask, n_action_mask):
                 assert sum(previous_action_mask) > 0 
@@ -941,7 +978,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     for k, v in args.items():
         if v is not None:
             params[k] = v
-    #if __name__ == "__main__":
+
     pprint(params)
     old_params = copy(params)
 
@@ -1013,27 +1050,16 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
 
     def add_to_rb(rb, path, id_max=None):
         data = torch.load(list_paths[-1])
-        #non_empty_mask = data['observations'].abs().sum(dim=2).bool().reshape(-1)
-        
-        #data = data[non_empty_mask]
         if id_max is not None:
             data = data[:id_max]
         replay_buffer.extend(data)
     
+    # Replay buffer instantiation
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None) #
+    
+    # Load the replay buffer if requiered 
     if params['load_buffer_from'] is not None:
-        rb_path = str(Path(params['load_buffer_from'])/'rb') #/ 'replay_buffer.pt')
-        """bs = replay_buffer._batch_size
-        rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
-        
-        print("loading buffer from", rb_path)
-        snapshot = torchsnapshot.Snapshot(path=rb_path)
-        target_state = {
-            "state": replay_buffer
-        }
-        snapshot.restore(app_state=target_state)
-        print("Replay buffer saved to", rb_path)
-        replay_buffer._batch_size = bs"""
+        rb_path = str(Path(params['load_buffer_from'])/'rb') 
 
         list_paths = [ f.path for f in os.scandir(rb_path) if f.is_file() ]
         list_paths.sort()
@@ -1046,9 +1072,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             for sub_rb_path in list_paths:
                 print("sub_rb_path", sub_rb_path)
                 add_to_rb(replay_buffer, sub_rb_path, frac)
-        #with open(rb_path, 'rb') as handle:
-        #    data = pickle.load(handle)
-
 
     ### Creating Agents
     q_agents = [QAgent(env, a, params, size_obs, size_act, writer, run_name)  for a in range(env.n_agents)]
@@ -1067,6 +1090,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         
     results = []
     pbar=trange(params['total_timesteps'])
+    # Main training loop
     for completed_episodes in pbar:
         # Training episode
         if not params['visualisation']:
@@ -1074,15 +1098,12 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             if not params['fixed_buffer']:
                 run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=True, visualisation=False, verbose=False, writer=writer)
                 
-
         # Evaluation episode
         if completed_episodes % params['evaluation_frequency'] == 0:
             if params['plot_q_values']:
                 run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, plot_q_values=True, writer=writer)
             
-            #list_total_reward = []
             agents_total_rewards = []
-            #[[] for a in range(n_agents)]
             average_duration = 0.0
 
             for eval in range(params['evaluation_episodes']):
@@ -1092,11 +1113,7 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
                 else:
                     nb_steps, total_reward = run_episode(env, q_agents, completed_episodes, params, replay_buffer=replay_buffer, smaller_buffer=smaller_buffer, training=False, visualisation=False)
 
-                #for a in range(n_agents):
                 agents_total_rewards.append(total_reward)
-                #episode_reward += np.mean(n_reward)
-                #average_reward 
-                #list_total_reward.append(list(n_reward))
                 average_duration += nb_steps
             
             average_duration /= params['evaluation_episodes']
@@ -1175,7 +1192,6 @@ def main(**params):
     params["run_name"] += '_{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 
     print("Run name:", params["run_name"])
-        
     steps, results = run_training(**params)
 
     wandb.finish()

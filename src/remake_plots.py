@@ -1,6 +1,3 @@
-#NB_RUNS = 3
-
-#from iql import run_training
 import pandas as pd 
 import matplotlib.pyplot as plt
 import seaborn as sns

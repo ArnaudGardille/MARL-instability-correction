@@ -142,6 +142,7 @@ def product_dict(**kwargs):
 
 params_list_choices_dicts = list(product_dict(**params_list_choice))
 
+# Defualt parameters
 test_params = {
     'rb': 'laber',
     'evaluation_frequency':100,
@@ -158,6 +159,7 @@ for k, v in params_list_choice.items():
         modified_params[i] = k
         i += 1
 
+# Experiment name
 experiment_name= '{date:%Y-%m-%d_%H:%M:%S}'.format( date=datetime.datetime.now() ) 
 for k in params_const:
     experiment_name += '-' + str(k)
@@ -168,6 +170,7 @@ print("experiment_name:", experiment_name)
 path = Path.cwd() / 'results' / experiment_name
 os.makedirs(path, exist_ok=True)
 
+# Running experiments
 results_df = []
 for run in range(args.nb_runs):
     print("Run", run)
@@ -183,7 +186,6 @@ for run in range(args.nb_runs):
 
         param_dict = {**params_choice, **params_const}
         
-        
         steps, avg_opti = run_training(path=path, run_name=run_name, seed=run, **param_dict)
         n = len(avg_opti)
         
@@ -198,6 +200,7 @@ for run in range(args.nb_runs):
         result_df = pd.DataFrame(results)
         results_df.append(result_df)
 
+# Saving
 with open(path/'params_const.yaml', 'w') as f:
     yaml.dump(params_const, f, default_flow_style=False)
 
@@ -207,9 +210,9 @@ with open(path/'params_list_choice.yaml', 'w') as f:
 results_df = pd.concat(results_df)
 results_df.to_csv(path/ 'eval_prio.csv', index=False)
 
+# Diplay results
 sns.lineplot(x="Step", y="Average optimality",
              hue=modified_params[0], style=modified_params[1],
              data=results_df, errorbar=('ci', 90))
 
 plt.savefig(path/'eval_prio.png', format='png')
-#plt.show()
