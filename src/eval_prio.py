@@ -7,8 +7,8 @@ import os
 sns.set_theme(style="darkgrid")
 
 prios=('td_error', 'td-cur', 'cur', 'td-past', 'td-cur-past', 'cur-past')
-# 'td/past' 'td*cur/past' 'cur/past' 
 
+# Default parameters
 params = {
     'rb': 'laber',
     'evaluation_frequency':100,
@@ -16,8 +16,10 @@ params = {
     'evaluation_episodes':100,
 }
 
+# Number of episodes over which to average
 NB_RUNS = 3
 
+# Dictionary to save the results
 results = {
     'Average optimality': [],
     'Run': [],
@@ -27,7 +29,7 @@ results = {
 
 results_df = []
 for run in range(NB_RUNS):
-
+    # Testing the different prioritisations
     for prio in prios:
         run_name= "eval_prio/{prio}/{run}"
         params['prio'] = prio
@@ -51,8 +53,11 @@ results_df = pd.concat(results_df)
 path = Path.cwd() / 'results' 
 os.makedirs(path, exist_ok=True)
 print(results_df)
+
+# Save results
 results_df.to_csv(path/ 'eval_prio.csv', index=False)
 
+# Plot results
 sns.lineplot(x="Step", y="Average optimality",
              hue="Prio", #style="event",
              data=results_df)
