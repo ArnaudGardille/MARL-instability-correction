@@ -1,6 +1,3 @@
-
-
-
 from myenvs.simultaneous_attack import *
 from myenvs.water_bomber import *
 from torch.distributions.categorical import Categorical
@@ -66,10 +63,8 @@ def parse_args():
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
-    #parser.add_argument("--correct-prio-small-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-    #parser.add_argument("--correct-prio-big-buffer", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
     parser.add_argument("--correct-prio", type=lambda x: bool(strtobool(x)), nargs="?", const=True,
-        help="")
+        help="whether we correct the prioritisation")
     parser.add_argument("--device", type=str, choices=['cpu', 'mps', 'cuda'], nargs="?", const=True,
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--save-model", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -98,10 +93,11 @@ def parse_args():
     parser.add_argument("--x-max", type=int, help="Only for the water-bomber env")
     parser.add_argument("--y-max", type=int, help="Only for the water-bomber env")
     parser.add_argument("--t-max", type=int, help="Maximum episode duration")
-    parser.add_argument("--n-agents", type=int)
+    parser.add_argument("--n-agents", type=int, help="Number of playing agents")
     parser.add_argument("--env-normalization", type=lambda x: bool(strtobool(x)), nargs="?", const=True)
     parser.add_argument("--map", type=str, nargs="?", const=True, 
         help="Select the map.  For SMAC: ['10m_vs_11m', '27m_vs_30m', '2c_vs_64zg', '2s3z', '2s_vs_1sc', '3s5z', '3s5z_vs_3s6z', '3s_vs_5z', 'bane_vs_bane', 'corridor', 'MMM', 'MMM2']. For MPE: ['adversary', 'crypto', 'push', 'reference', 'speaker_listener', 'spread', 'tag', 'world_comm', 'simple']")
+    
     # Algorithm specific arguments
     parser.add_argument("--load-agents-from", type=str, default=None,
         help="the experiment from which to load agents.")
@@ -166,12 +162,16 @@ def parse_args():
 
     return args
 
-
 def weighted_mse_loss(predicted, target, weight):
+    """
+    Allows to weight the MSE.
+    """
     return (weight * (predicted - target) ** 2).mean()
 
-# ALGO LOGIC: initialize agent here:
-class QNetwork(nn.Module): #QNetworkSimpleMLP
+class QNetwork(nn.Module):
+    """
+    Neural network that approxiates the Q function.
+    """
     def __init__(self, obs_shape, act_shape):
         super(QNetwork, self).__init__()
         self.network = nn.Sequential(
@@ -186,6 +186,9 @@ class QNetwork(nn.Module): #QNetworkSimpleMLP
         return self.network(x)
 
 class DuelingQNetwork(nn.Module):
+    """
+    Neural network that approxiates the Q function with dueling architecture.
+    """
     def __init__(self, obs_shape, act_shape):
         super(DuelingQNetwork, self).__init__()
 
@@ -225,6 +228,9 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
 
 
 def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioritize_big_buffer=False, path=None):
+    """
+    Instantiation of the replay buffer. takes as input the size and type of the replay buffer.
+    """
     smaller_buffer = None
     if path is not None:
         os.makedirs(path, exist_ok=True)
@@ -261,7 +267,6 @@ def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioriti
         else:
             replay_buffer = TensorDictReplayBuffer(
                 storage=rb_storage,
-                #priority_key="td_error",
                 batch_size=10*batch_size,
             )
         
@@ -281,6 +286,9 @@ def create_rb(rb_type, buffer_size, batch_size, n_agents, device, prio, prioriti
 
 
 def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_agent):
+    """
+    Compute the likelyhood of others actions, supposing their actions are independant at a given timestep.
+    """
         current_likelyhood, past_likelyhood = [], []
         for agent_id, agent in enumerate(agents):
             
@@ -322,7 +330,9 @@ def current_and_past_others_actions_likelyhood(sample, agents, epsilon, single_a
 
 
 def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, writer=None, use_state=False):
-    
+    """
+    Multiplies the error by the ratio, as exposed in the article, in order to correct the instablity of others policies evolution.
+    """
     n_agents = len(agents)
     if use_state:
         sample = sample[:,0]
@@ -361,7 +371,7 @@ def add_ratios(sample, agents, epsilon, single_agent, completed_episodes=None, w
 
 def make_env(scenario_name, benchmark=False):
     '''
-    Only for MPE
+    Instatiation of the environment (only for the MPE environment).
     '''
     from mpe.environment import MultiAgentEnv
     import mpe.scenarios as scenarios
@@ -378,6 +388,9 @@ def make_env(scenario_name, benchmark=False):
     return env
 
 def create_env(env_id, params, render_mode=None):
+    """
+    Instatiation of the environment.
+    """
     if env_id == 'simultaneous':
         from myenvs.simultaneous_attack import SimultaneousEnv
         env = SimultaneousEnv(n_agents=params['n_agents'], n_actions=params['n_actions'])#, common_reward=params['enforce_coop'])
@@ -406,6 +419,9 @@ def create_env(env_id, params, render_mode=None):
     return env
 
 def get_n_likeliest(batch, key, n):
+    """
+    Get the N likelyest actions.
+    """
     descending = batch[key].sort(dim=0, descending=True)
     descending = batch[key] >= descending.values[n]
     descending = descending.reshape(-1)
@@ -413,6 +429,9 @@ def get_n_likeliest(batch, key, n):
     return batch[descending]
 
 def get_agents_distrib(batch, q_agents, epsilon):
+    """
+    Get the distribution of others agents policies.
+    """
     concat_distrib = []
     for agent_id, agent in enumerate(q_agents):
         obs = batch[:,agent_id]["observations"]
@@ -422,7 +441,11 @@ def get_agents_distrib(batch, q_agents, epsilon):
 
     concat_distrib = torch.stack(concat_distrib, dim=1)
     return concat_distrib
+    
 class StateWrapper(ObservationWrapper):
+    """
+    Shift the observations so that their are in [-1, 1].
+    """
     def __init__(self, env):
         super().__init__(env)
         self.env.reset()
@@ -434,6 +457,9 @@ class StateWrapper(ObservationWrapper):
         return self.env.get_state()
 
 class QAgent():
+    """
+    Class for the Agents.
+    """
     def __init__(self, env, agent_id, params, obs_shape, act_shape, writer, experiment_hash=None):
         for k, v in params.items():
             if k=='none':
@@ -466,6 +492,9 @@ class QAgent():
         self.target_network.load_state_dict(self.q_network.state_dict())
 
     def get_distrib(self, obs, avail_actions, epsilon):
+        """
+        Get the distibution of agents actions given a state.
+        """
         obs = obs.to(self.device)
         avail_actions = avail_actions.cpu()
         with torch.no_grad():
@@ -486,7 +515,7 @@ class QAgent():
 
     def act(self, obs, avail_actions, others_explo=None, training=True):
         """
-        Greedy action
+        Sample an action in an epsilon greedy fashion.
         """
         if self.params['add_id']:   
             obs = torch.cat((obs, self.one_hot_id), dim=-1).float()
@@ -509,6 +538,10 @@ class QAgent():
         return float(action)
     
     def train(self, sample, completed_episodes):
+        """
+        Train the agents over a batch (sample) of transitions.
+        the number 'completed_episodes' is used to define epsilon.
+        """
         sample = sample.to(self.device)
 
         obs = sample['observations'].float()
@@ -573,7 +606,6 @@ class QAgent():
 
     def save(self, path):
         model_path = path / f"{self.agent_id}.iql_model"
-        
         torch.save(self.q_network.state_dict(), model_path)
 
     def load(self, model_path):
@@ -587,7 +619,9 @@ class QAgent():
 
 
     def get_td_error(self, sample):
-
+        """
+        Compute the TD error given a sample (batch) of transitions.
+        """
         sample = sample.to(self.device)
         obs = sample['observations'].float()
         action_mask = sample['action_mask']
@@ -611,10 +645,17 @@ class QAgent():
         return td_error
  
     def importance_weight(self, sample, completed_episodes):
+        """
+        Compute the importance weight, as explained in the paper
+        """
         num, denom = self.current_and_past_others_actions_likelyhood(sample, completed_episodes)
         return (num/denom).to(self.device)
     
 def visualize_trajectory(env, agents, completed_episodes):
+    """
+    Allows to visualize an episode trajectory on the water bomber environment.
+    """
+    
     arrows = {1:(1,0), 3:(-1,0), 2:(0,1), 0:(0,-1)}
 
     n_obs, info = env.reset(return_info=True, deterministic=True)
@@ -668,6 +709,9 @@ def visualize_trajectory(env, agents, completed_episodes):
 
 
 def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_episodes, training, writer):
+    """
+    Execute a straining step for the agent.
+    """
     for q_agent in q_agents:
         q_agent.q_network = q_agent.q_network.to(q_agent.device)
         q_agent.target_network = q_agent.target_network.to(q_agent.device)
@@ -685,22 +729,7 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             smaller_buffer.extend(big_sample)
             sample = smaller_buffer.sample()
             index = big_index[sample['index']][:,0]
-            #writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes, bins=10)
 
-            """values = np.array(index).astype(float).reshape(-1)
-            counts, limits= np.histogram(values, bins=10, range=(0.0, params['buffer_size']))
-
-            sum_sq = values.dot(values)
-            writer.add_histogram_raw(
-                tag='distribution centers',
-                min=values.min(),
-                max=values.max(),
-                num=len(values),
-                sum=values.sum(),
-                sum_squares=sum_sq,
-                bucket_limits=limits[1:].tolist(),
-                bucket_counts=counts.tolist(),
-                global_step=completed_episodes)"""
             writer.add_histogram('distribution centers', sample['index'].reshape(-1), completed_episodes)
             writer.flush()
             if params['prioritize_big_buffer']:
@@ -719,18 +748,14 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
             if not (params['env_id'] == 'mpe' and params['map'] == 'simple'):
                 sample = add_ratios(sample, q_agents, epsilon, params['single_agent'], use_state=params['use_state'], completed_episodes=completed_episodes, writer=maybe_writer)
         
-        #samples = [sample for _ in range(n_agents)]
-        #writer.add_histogram('distribution centers', index.reshape(-1), completed_episodes)
         weights = torch.ones((len(sample),n_agents))
 
         if '_weight' in sample.keys() and params['correct_prio']:
             weights = sample['_weight']
         
         weights = weights/weights.sum()
-        #weights.sum()/weights
-        #weights /= weights.max()
 
-        sample['weights'] = weights #.repeat((n_agents, 1)).T
+        sample['weights'] = weights 
 
         td_errors = []
         for agent_id, agent in enumerate(q_agents):
@@ -753,6 +778,10 @@ def training_step(params, replay_buffer, smaller_buffer, q_agents, completed_epi
     return q_agents
 
 def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, smaller_buffer=None, training=False, visualisation=False, verbose=False, plot_q_values=False, writer=None):
+    """
+    Run an entire episode with the given agents and environment.
+    Allows for training, and in such case requiers a replay buffer.
+    """
     for q_agent in q_agents:
         q_agent.q_network = q_agent.q_network.to('cpu')
         q_agent.target_network = q_agent.target_network.to('cpu')
@@ -775,14 +804,13 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     n_next_obs = None
     n_previous_action_mask = None
     epsilon = linear_schedule(params['start_e'], params['end_e'], params['exploration_fraction'] * params['total_timesteps'], completed_episodes)
-    #if not training:
-    #    epsilon = 0.0
 
     n_obs = torch.tensor(n_obs)
 
     n_act_randomly = [params['random_policy'] or (random.random() < epsilon and training) for _ in range(env.n_agents)]
     n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
 
+    # Data augmentation
     if params['add_epsilon']:
         if params['use_state']:
             n_epsilon = torch.full((1,1), epsilon)
@@ -800,7 +828,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         if len(n_obs.shape)==1:
             n_other_act_randomly = torch.tensor(n_other_act_randomly).reshape(-1)
         n_obs = torch.cat((n_obs, n_other_act_randomly.float()), dim=-1).float()
-    
+
+    # Main loop
     while not terminated:
         if visualisation:
             sleep(0.1)
@@ -826,11 +855,6 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
             n_action.append(action)
             n_probabilities.append(probability)
 
-        if False:
-            print("n_previous_action_mask", n_previous_action_mask)
-            print("n_action", n_action)
-            #env.render()
-
         n_previous_action_mask = n_action_mask
         n_action = [int(a) for a in n_action]
         n_next_obs, n_reward, n_terminated, n_truncated, info = env.step(n_action)
@@ -840,7 +864,8 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         n_other_act_randomly = torch.tensor([n_act_randomly[:agent_id]+n_act_randomly[agent_id+1:] for agent_id in range(n_agents)])
 
         n_next_obs = torch.tensor(n_next_obs)
-
+    
+        # Data augmentation
         if params['add_epsilon']:
             if params['use_state']:
                 n_epsilon = torch.full((1,1), epsilon)
@@ -865,17 +890,9 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
         n_next_obs = torch.tensor(n_next_obs, dtype=torch.float)
         n_action_mask = info['avail_actions']
 
-        if False:
-            print("n_next_obs", n_next_obs)
-            print("n_reward", n_reward)
-            print("n_terminated", n_terminated)
-            print("n_action_mask", n_action_mask)
-            print()
-
         episode_reward += np.array(n_reward).squeeze()
 
-        #if training: On ajoute au rb meme quand on explore pas
-
+        # Si training: On ajoute au rb meme quand on explore pas
         if training and (replay_buffer is not None and not params['fixed_buffer']):    
             for previous_action_mask, action_mask in zip(n_previous_action_mask, n_action_mask):
                 assert sum(previous_action_mask) > 0 
@@ -910,6 +927,10 @@ def run_episode(env, q_agents, completed_episodes, params, replay_buffer=None, s
     return nb_steps, episode_reward 
     
 def run_training(env_id, verbose=True, run_name='', path=None, **args):
+    """
+    Préparation puis execution de l'entrainement, selon les paramètres définis dans le fichier yaml.
+    Le modèle résultant les les informations de l'entrainement seront enregistés dans "run_name" si indiqué.
+    """
     with open(Path('src/config/'+env_id+'/default.yaml')) as f:
         params = yaml.safe_load(f)
 
@@ -940,7 +961,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in params.items()])),
     )
-    #writer.add_hparams(vars(args), {})
     writer.flush()
 
 
@@ -966,7 +986,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     try:
         size_act = int(env.action_space[-1].n)
     except:
-        #size_act = int(env.action_space(0).n)
         size_act = int(env.action_space(0).n)
     
     ## Increasing the state size for state augmentation
@@ -1003,7 +1022,6 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
     
     replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None) #
     if params['load_buffer_from'] is not None:
-        #replay_buffer, smaller_buffer = create_rb(rb_type=params['rb'], buffer_size=params['buffer_size'], batch_size=params['batch_size'], n_agents=env.n_agents, device=params['device'], prio=params['prio'], prioritize_big_buffer=params['prioritize_big_buffer'], path=path/run_name/'replay_buffer' if params['buffer_on_disk'] else None)
         rb_path = str(Path(params['load_buffer_from'])/'rb') #/ 'replay_buffer.pt')
         """bs = replay_buffer._batch_size
         rb_path = str(Path(params['load_buffer_from']) / 'rb' / 'final')
@@ -1107,44 +1125,24 @@ def run_training(env_id, verbose=True, run_name='', path=None, **args):
             pbar.set_description(f"Return={average_return:5.1f}") #, Duration={average_duration:5.1f}"
             results.append(average_return)
 
-
-
         stored_transitions = completed_episodes*params['t_max']    
         if params['save_buffer'] and (stored_transitions % params['buffer_size'])==0 and (stored_transitions // params['buffer_size'])!=0:
             k = (stored_transitions // params['buffer_size'])-1
             os.makedirs(path/ run_name / 'rb', exist_ok=True)
             rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
-            #"""
-            #rb_path = path/ run_name / 'replay_buffer.pickle'
             torch.save(replay_buffer[:len(replay_buffer)], rb_path)
             print("Replay buffer saved to", rb_path)
 
-            #"""
-            
-
-            #state = {"state": replay_buffer}
-            #snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
-                    
-                
     env.close() 
     visu_env.close()
 
     # Savings
     if params['save_buffer']:
         stored_transitions = completed_episodes*params['t_max']    
-        #rb_path = str(path/ run_name / 'rb' / 'final')
-        #os.makedirs(rb_path, exist_ok=True)
-        #"""
         os.makedirs(path/ run_name / 'rb', exist_ok=True)
         k = (stored_transitions // params['buffer_size'])
         rb_path = str(path/ run_name / 'rb' / ('replay_buffer_'+str(k)+'.pt'))
         torch.save(replay_buffer[:len(replay_buffer)], rb_path)
-        #with open(rb_path, 'wb') as handle:
-        #"""
-        
-
-        #state = {"state": replay_buffer}
-        #snapshot = torchsnapshot.Snapshot.take(app_state=state, path=rb_path)
         print("Replay buffer saved to", rb_path)
             
     steps = [i for i in range(0, params['total_timesteps'], params['evaluation_frequency'])]    
